@@ -13,6 +13,9 @@
 #define _VER "vasm 2.0b"
 const char *copyright = _VER " (c) in 2002-2025 Volker Barthelmann";
 #ifdef AMIGA
+#ifndef __AMIGADATE__
+#define __AMIGADATE__ __DATE__
+#endif
 static const char *_ver = "$VER: " _VER " " __AMIGADATE__ "\r\n";
 #endif
 
