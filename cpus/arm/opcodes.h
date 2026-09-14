@@ -81,6 +81,7 @@
   "ldc",    {REG11,REG15,R19PO,IMCP2},            {0x0c100000,AA2UP,0},
   "ldm",    {R19WB,RLIST},                        {0x08100000,AAANY,NOPC},
     "ldmia",{TR10W,TRLST},                        {0xc800,AA4TUP,THUMB},
+  "ldr",    {REG15,LTL12},                        {0x051f0000,AAANY,NOPCWB},
   "ldr",    {REG15,PCL12},                        {0x051f0000,AAANY,NOPCWB},
   "ldr",    {REG15,R19PR,IMUD1},                  {0x05100000,AAANY,NOPCWB},
   "ldr",    {REG15,R19PR,R3UD1},                  {0x07100000,AAANY,NOPCWB|NOPCR03},
@@ -199,3 +200,4 @@
     "tst",  {TRG02,TRG05},                        {0x4200,AA4TUP,THUMB},
   "umlal",  {REG15,REG19,REG03,REG11},            {0x00a00090,AA3MUP,SETCC|NOPC|DIFR19|DIFR15|DIFR03},
   "umull",  {REG15,REG19,REG03,REG11},            {0x00800090,AA3MUP,SETCC|NOPC|DIFR19|DIFR15|DIFR03},
+  " ltorg", {0},                                  {0,AAANY,0},

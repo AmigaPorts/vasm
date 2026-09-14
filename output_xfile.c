@@ -4,7 +4,7 @@
 #include "vasm.h"
 #include "output_xfile.h"
 #if defined(OUTXFIL) && defined(VASM_CPU_M68K)
-static char *copyright="vasm xfile output module 0.4a (c) 2018,2020,2021,2024 Frank Wille";
+static char *copyright="vasm xfile output module 0.4b (c) 2018,2020,2021,2024 Frank Wille";
 
 static char *exec_symname;
 static uint32_t exec_offs;
@@ -119,7 +119,8 @@ static void do_relocs(section *asec,taddr pc,atom *a)
         patch_nreloc(a,rl,
                      (xfile_sym_value(((nreloc *)rl->reloc)->sym)
                       + nreloc_real_addend(rl->reloc)) -
-                     (pc + ((nreloc *)rl->reloc)->byteoffset),1);
+                     (secoffs[asec->idx] + pc +
+                      ((nreloc *)rl->reloc)->byteoffset),1);
         break;
       case REL_ABS:
         rcnt++;
@@ -148,18 +149,17 @@ static void do_relocs(section *asec,taddr pc,atom *a)
 static void xfile_writesection(FILE *f,section *sec,taddr sec_align)
 {
   if (sec) {
-    utaddr pc = secoffs[sec->idx];
-    utaddr npc;
+    utaddr pc;
     atom *a;
 
-    for (a=sec->first; a; a=a->next) {
-      npc = fwpcalign(f,a,sec,pc);
-      do_relocs(sec,npc,a);
+    for (a=sec->first,pc=0; a; a=a->next) {
+      pc = fwpcalign(f,a,sec,pc);
+      do_relocs(sec,pc,a);
       if (a->type == DATA)
         fwdata(f,a->content.db->data,a->content.db->size);
       else if (a->type == SPACE)
         fwsblock(f,a->content.sb);
-      pc = npc + atom_size(a,sec,npc);
+      pc += atom_size(a,sec,pc);
     }
     fwalign(f,pc,sec_align);
   }
@@ -219,15 +219,15 @@ static size_t xfile_writerelocs(FILE *f,section *sec)
   size_t sz = 0;
 
   if (sec) {
-    utaddr pc = secoffs[sec->idx];
-    utaddr npc;
+    utaddr so = secoffs[sec->idx];
+    utaddr pc;
     atom *a;
     rlist *rl;
 
     for (a=sec->first; a; a=a->next) {
       int nrel = 0;
 
-      npc = pcalign(a,pc);
+      pc = pcalign(a,pc);
 
       rl = get_relocs(a);
       while (rl) {
@@ -246,7 +246,7 @@ static size_t xfile_writerelocs(FILE *f,section *sec)
         /* write distances in bytes between them */
         for (i=0; i<nrel; i++) {
           /* determine 16bit distance to next relocation */
-          utaddr newoffs = npc + sortoffs[i];
+          utaddr newoffs = so + pc + sortoffs[i];
           taddr diff = newoffs - lastoffs;
 
           if (diff < 0) {
@@ -265,7 +265,7 @@ static size_t xfile_writerelocs(FILE *f,section *sec)
           lastoffs = newoffs;
         }
       }
-      pc = npc + atom_size(a,sec,npc);
+      pc += atom_size(a,sec,pc);
     }
   }
 

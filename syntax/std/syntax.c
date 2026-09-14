@@ -1,5 +1,5 @@
 /* syntax.c  syntax module for vasm */
-/* (c) in 2002-2024 by Volker Barthelmann and Frank Wille */
+/* (c) in 2002-2026 by Volker Barthelmann and Frank Wille */
 
 #include "vasm.h"
 #include "stabs.h"
@@ -13,7 +13,7 @@
    be provided by the main module.
 */
 
-const char *syntax_copyright="vasm std syntax module 5.6a (c) 2002-2024 Volker Barthelmann";
+const char *syntax_copyright="vasm std syntax module 5.6b (c) 2002-2026 Volker Barthelmann";
 hashtable *dirhash;
 int dotdirs = 1;
 
@@ -36,32 +36,18 @@ char commentchar=';';
 static char macroname[] = ".macro";
 static char endmname[] = ".endm";
 static char reptname[] = ".rept";
-static char irpname[] = ".irp";
-static char irpcname[] = ".irpc";
 static char endrname[] = ".endr";
-static struct namelen dmacro_dirlist[] = {
-  { 6,&macroname[0] }, { 0,0 }
-};
-static struct namelen dendm_dirlist[] = {
-  { 5,&endmname[0] }, { 0,0 }
-};
-static struct namelen drept_dirlist[] = {
-  { 5,&reptname[0] }, { 4,&irpname[0] }, { 5,&irpcname[0] }, { 0,0 }
-};
-static struct namelen dendr_dirlist[] = {
-  { 5,&endrname[0] }, { 0,0 }
+static struct namelen macro_dirlist[] = {
+  { 6,macroname }, { 0,0 }
 };
 static struct namelen endm_dirlist[] = {
-  { 4,&endmname[1] }, { 0,0 }
-};
-static struct namelen macro_dirlist[] = {
-  { 5,&macroname[1] }, { 0,0 }
+  { 5,endmname }, { 0,0 }
 };
 static struct namelen rept_dirlist[] = {
-  { 4,&reptname[1] }, { 3,&irpname[1] }, { 4,&irpcname[1] },{ 0,0 }
+  { 5,reptname }, { 4,".irp" }, { 5,".irpc" }, { 0,0 }
 };
 static struct namelen endr_dirlist[] = {
-  { 4,&endrname[1] }, { 0,0 }
+  { 5,endrname }, { 0,0 }
 };
 
 static int gas_compat;
@@ -414,6 +400,48 @@ static void handle_local(char *s)
   do_binding(s,LOCAL);
 }
 
+static void do_visibility(char *s,int vis)
+{
+  static const char *vis_name[] = {
+    "default","internal","hidden","protected",
+    "exported","singleton","eliminate",""
+  };
+  symbol *sym;
+  strbuf *name;
+
+  while(1){
+    if(!(name=parse_identifier(0,&s))){
+      syntax_error(10);  /* identifier expected */
+      return;
+    }
+    sym=new_import(name->str);
+    if(ELF_VIS(sym)!=0&&ELF_VIS(sym)!=vis)
+      syntax_error(15,sym->name,vis_name[ELF_VIS(sym)]);  /* vis. already set */
+    else
+      sym->flags|=(vis&7)<<SH_RSRVD_S;
+    s=skip(s);
+    if(*s!=',')
+      break;
+    s=skip(s+1);
+  }
+  eol(s);
+}
+
+static void handle_internal(char *s)
+{
+  do_visibility(s,1);  /* visibility STV_INTERNAL=1 */
+}
+
+static void handle_hidden(char *s)
+{
+  do_visibility(s,2);  /* visibility STV_HIDDEN=2 */
+}
+
+static void handle_protected(char *s)
+{
+  do_visibility(s,3);  /* visibility STV_PROTECTED=3 */
+}
+
 static void do_align(taddr align,size_t width,expr *fill,taddr max)
 {
   atom *a = new_space_atom(number_expr(0),width,fill);
@@ -732,9 +760,7 @@ static void handle_rept(char *s)
   utaddr cnt = parse_constexpr(&s);
 
   eol(s);
-  new_repeat(cnt,NULL,NULL,
-             dotdirs?drept_dirlist:rept_dirlist,
-             dotdirs?dendr_dirlist:endr_dirlist);
+  new_repeat(cnt,NULL,NULL,rept_dirlist,endr_dirlist);
 }
 
 static void do_irp(int type,char *s)
@@ -748,9 +774,7 @@ static void do_irp(int type,char *s)
   s=skip(s);
   if (*s==',')
     s=skip(s+1);
-  new_repeat(type,name->str,mystrdup(s),
-             dotdirs?drept_dirlist:rept_dirlist,
-             dotdirs?dendr_dirlist:endr_dirlist);
+  new_repeat(type,name->str,mystrdup(s),rept_dirlist,endr_dirlist);
 }
 
 static void handle_irp(char *s)
@@ -765,7 +789,8 @@ static void handle_irpc(char *s)
 
 static void handle_endr(char *s)
 {
-  syntax_error(12,endrname,reptname);  /* unexpected endr without rept */
+  syntax_error(12,dotdirs?endrname:endrname+1,
+               dotdirs?reptname:reptname+1);  /* unexpected endr without rept */
 }
 
 static void handle_macro(char *s)
@@ -776,15 +801,15 @@ static void handle_macro(char *s)
     s=skip(s);
     if(ISEOL(s))
       s=NULL;
-    new_macro(name->str,dotdirs?dmacro_dirlist:macro_dirlist,
-              dotdirs?dendm_dirlist:endm_dirlist,s);
+    new_macro(name->str,macro_dirlist,endm_dirlist,s);
   }else
     syntax_error(10);  /* identifier expected */
 }
 
 static void handle_endm(char *s)
 {
-  syntax_error(12,endmname,".macro");  /* unexpected endm without macro */
+  syntax_error(12,dotdirs?endmname:endmname+1,
+               dotdirs?macroname:macroname+1);  /* unexpected endm without macro */
 }
 
 static void ifdef(char *s,int b)
@@ -1144,9 +1169,12 @@ struct {
   "nolist",handle_nolist,
   "swbeg",handle_swbeg,
   "vdebug",handle_vdebug,
+  "internal",handle_internal,
+  "hidden",handle_hidden,
+  "protected",handle_protected,
 };
 
-int dir_cnt=sizeof(directives)/sizeof(directives[0]);
+static int dir_cnt=sizeof(directives)/sizeof(directives[0]);
 
 /* checks for a valid directive, and return index when found, -1 otherwise */
 static int check_directive(char **line)
@@ -1164,7 +1192,7 @@ static int check_directive(char **line)
     name++;
   else if (dotdirs)
     return -1;
-  if (!find_namelen_nc(dirhash,name,s-name,&data))
+  if (!find_namelen(dirhash,name,s-name,&data))
     return -1;
   *line = s;
   return data.idx;
@@ -1534,12 +1562,12 @@ strbuf *get_local_label(int n,char **start)
 
 int init_syntax(void)
 {
-  size_t i;
+  int i;
   hashdata data;
-  dirhash=new_hashtable(0x1000);
+  dirhash=new_hashtable_nc(0x1000);
   for(i=0;i<dir_cnt;i++){
     data.idx=i;
-    add_hashentry(dirhash,directives[i].name,data,1);  /* case insensitive */
+    add_hashentry(dirhash,directives[i].name,data);
     if(!strcmp(directives[i].name,"else"))
       dir_else=i;
     if(!strcmp(directives[i].name,"elseif"))
@@ -1557,7 +1585,7 @@ int init_syntax(void)
   current_pc_char = '.';
 #endif  
   esc_sequences = !noesc;
-  nocase_macros = 1;
+  set_nocase_macros(1); /* macros are case-insenstivie, like mnemonics */
   return 1;
 }
 

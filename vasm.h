@@ -1,5 +1,5 @@
 /* vasm.h  main header file for vasm */
-/* (c) in 2002-2025 by Volker Barthelmann */
+/* (c) in 2002-2026 by Volker Barthelmann */
 
 #include <stdlib.h>
 #include <stddef.h>
@@ -31,9 +31,9 @@ typedef struct strbuf {
 #define MAXPADSIZE 8  /* max. pattern size to pad alignments */
 
 #include "cpu.h"
+#include "syntax.h"
 #include "symbol.h"
 #include "reloc.h"
-#include "syntax.h"
 #include "symtab.h"
 #include "expr.h"
 #include "atom.h"
@@ -117,7 +117,10 @@ struct section {
   taddr org;
   taddr pc;
   taddr rorg_pc,saved_pc; /* used during RORG blocks */
-  unsigned long idx;      /* usable by output module */
+  unsigned long idx;      /* also usable by output module */
+#if HAVE_CPU_SECT_EXTENSION
+  section_extc extc;      /* cpu-specific section-extension */
+#endif
 };
 
 /* mnemonic description */
@@ -135,6 +138,7 @@ typedef struct mnemonic {
 #define OPSZ_SWAP	0x200  /* operand stored with swapped bytes */
 
 
+extern const char *vasmname;
 extern char *inname,*outname,*output_format,*defsectname,*defsecttype;
 extern taddr defsectorg,inst_alignment;
 extern int chklabels,nocase,no_symbols,pic_check,unnamed_sections;
@@ -166,7 +170,6 @@ void set_section(section *);
 section *new_section(const char *,const char *,int);
 section *new_org(taddr);
 section *find_section(const char *,const char *);
-void switch_section(const char *,const char *);
 void switch_offset_section(const char *,taddr);
 void add_align(section *,taddr,expr *,int,unsigned char *);
 section *default_section(void);
@@ -230,14 +233,20 @@ dblock *eval_data(operand *,size_t,section *,taddr);
 #if HAVE_INSTRUCTION_EXTENSION
 void init_instruction_ext(instruction_ext *);
 #endif
+#if HAVE_CPU_SECT_EXTENSION
+void cpu_init_section(section *);
+#endif
+#if HAVE_CPU_CLEANUP_PARSE
+void cpu_cleanup_parse(section *);
+#endif
 #if MAX_QUALIFIERS!=0
 char *parse_instruction(char *,int *,char **,int *,int *);
 int set_default_qualifiers(char **,int *);
 #endif
 #if HAVE_CPU_OPTS
 void cpu_opts_init(section *);
-void cpu_opts(void *);
 void print_cpu_opts(FILE *,void *);
+void cpu_opts(void *);
 #endif
 
 /* provided by syntax.c */
@@ -285,3 +294,4 @@ int init_output_woz(char **,void (**)(FILE *,section *,symbol *),int (**)(char *
 int init_output_pap(char **,void (**)(FILE *,section *,symbol *),int (**)(char *));
 int init_output_hans(char **,void (**)(FILE *,section *,symbol *),int (**)(char *));
 int init_output_coff(char **,void (**)(FILE *,section *,symbol *),int (**)(char *));
+int init_output_aof(char **,void (**)(FILE *,section *,symbol *),int (**)(char *));

@@ -85,7 +85,6 @@ typedef struct {
 
 /* Register symbols */
 #define HAVE_REGSYMS
-#define REGSYMHTSIZE 64
 #define RTYPE_R      0  /* R0-R31 */
 #define RTYPE_CC     1  /* condition codes (0-31) */
 

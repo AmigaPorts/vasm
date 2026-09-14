@@ -4,7 +4,7 @@
 #include "vasm.h"
 #include "output_tos.h"
 #if defined(OUTTOS) && defined(VASM_CPU_M68K)
-static char *copyright="vasm tos output module 2.4b (c) 2009-2016,2020-2025 Frank Wille";
+static char *copyright="vasm tos output module 2.4c (c) 2009-2016,2020-2025 Frank Wille";
 int tos_hisoft_dri = 1;
 int sozobonx_dri;
 
@@ -145,7 +145,8 @@ static void do_relocs(section *asec,taddr pc,atom *a)
         patch_nreloc(a,rl,
                      (tos_sym_value(((nreloc *)rl->reloc)->sym,1)
                      + nreloc_real_addend(rl->reloc)) -
-                     (pc + ((nreloc *)rl->reloc)->byteoffset),1);
+                     (secoffs[asec->idx] + pc +
+                      ((nreloc *)rl->reloc)->byteoffset),1);
         break;
       case REL_ABS:
         checkdefined(rl,asec,pc,a);
@@ -174,10 +175,10 @@ static void do_relocs(section *asec,taddr pc,atom *a)
 static void tos_writesection(FILE *f,section *sec,taddr sec_align)
 {
   if (sec) {
-    utaddr pc = secoffs[sec->idx];
+    utaddr pc;
     atom *a;
 
-    for (a=sec->first; a; a=a->next) {
+    for (a=sec->first,pc=0; a; a=a->next) {
       pc = fwpcalign(f,a,sec,pc);
       if (exec_out)
         do_relocs(sec,pc,a);
@@ -315,7 +316,8 @@ static int tos_writerelocs(FILE *f,section *sec)
   int n = 0;
 
   if (sec) {
-    utaddr pc = secoffs[sec->idx];
+    utaddr so = secoffs[sec->idx];
+    utaddr pc = 0;
     atom *a;
 
     for (a=sec->first; a; a=a->next) {
@@ -332,7 +334,7 @@ static int tos_writerelocs(FILE *f,section *sec)
           /* make sure to process 32-bit absolute relocations only! */
           if (std_reloc(sorted_rlist[i])==REL_ABS
               && ((nreloc *)sorted_rlist[i]->reloc)->size==32) {
-            newoffs = pc + ((nreloc *)sorted_rlist[i]->reloc)->byteoffset;
+            newoffs = so + pc + ((nreloc *)sorted_rlist[i]->reloc)->byteoffset;
 
             if (lastoffs != ~0) {
               /* determine 8bit difference to next relocation */

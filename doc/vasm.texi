@@ -8,13 +8,13 @@
 @setfilename index.texi
 @settitle vasm manual
 @setchapternewpage odd
-@set UPDATED November 2025
+@set UPDATED February 2026
 
 @ifinfo
 
 This is the manual for the vasm assembler system.
 
-Copyright 2002-2025 Volker Barthelmann
+Copyright 2002-2026 Volker Barthelmann
 
 @end ifinfo
 
@@ -59,7 +59,7 @@ debugging or analyzing the output.
 
 @section Legal
 
-    vasm is copyright in 2002-2025 by Volker Barthelmann.
+    vasm is copyright in 2002-2026 by Volker Barthelmann.
 
     This archive may be redistributed without modifications and used
     for non-commercial purposes.
@@ -156,6 +156,10 @@ Detailed instructions how to build vasm can be found in the last chapter.
 @chapter O65 output module
 @include output_o65.texi
 
+@node AOF output module
+@chapter AOF output module
+@include output_aof.texi
+
 @node vobj output module
 @chapter vobj output module
 @include output_vobj.texi
@@ -239,6 +243,10 @@ Detailed instructions how to build vasm can be found in the last chapter.
 @node unSP cpu module
 @chapter unSP cpu module
 @include cpu_unsp.texi
+
+@node SWEET16 cpu module
+@chapter SWEET16 cpu module
+@include cpu_sweet16.texi
 
 @node HANS cpu module
 @chapter HANS cpu module

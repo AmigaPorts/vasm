@@ -1,5 +1,5 @@
 /* expr.c expression handling for vasm */
-/* (c) in 2002-2025 by Volker Barthelmann and Frank Wille */
+/* (c) in 2002-2026 by Volker Barthelmann and Frank Wille */
 
 #include "vasm.h"
 
@@ -28,7 +28,7 @@ int init_expr(void)
 }
 
 #ifndef EXPSKIP
-#define EXPSKIP() s=expskip(s)
+#define EXPSKIP(p) expskip(p)
 static char *expskip(char *s)
 {
   s=skip(s);
@@ -101,14 +101,13 @@ static expr *primary_expr(void)
   int base;
 
   if(*s=='('){
-    s++;
-    EXPSKIP();
+    s=EXPSKIP(++s);
     new=expression();
     if(*s!=')')
       general_error(6,')');
     else
       s++;
-    EXPSKIP();
+    s=EXPSKIP(s);
     return new;
   }
   if(buf=get_local_label(EXPBUFNO,&s)){
@@ -208,7 +207,7 @@ static expr *primary_expr(void)
       goto dummyexp;
     }
     s=const_suffix(start,s);
-    EXPSKIP();
+    s=EXPSKIP(s);
     new=new_expr();
     switch(new->type=exp_type){
       case NUM: new->c.val=val; break;
@@ -221,8 +220,7 @@ static expr *primary_expr(void)
   }
   s=m;
   if(*s==current_pc_char && !ISIDCHAR(*(s+1))){
-    s++;
-    EXPSKIP();
+    s=EXPSKIP(++s);
     if(make_tmp_lab){
       new=new_sym_expr(new_tmplabel(0));
       add_atom(0,new_label_atom(new->c.sym));
@@ -231,7 +229,7 @@ static expr *primary_expr(void)
   }
   if(buf=parse_identifier(EXPBUFNO,&s)){
     symbol *sym;    
-    EXPSKIP();
+    s=EXPSKIP(s);
     sym=find_symbol(buf->str);
     if(!sym){
 #ifdef NARGSYM
@@ -273,16 +271,16 @@ static expr *primary_expr(void)
         break;
       }
       if(BIGENDIAN){
-        val=(val<<8)+(unsigned char)c;
+        val=(val<<8)+(unsigned char)CHAR_CONST_TRANSFORM(c,quote);
       }else if(LITTLEENDIAN){
-        val+=((unsigned char)c)<<shift;
+        val+=((unsigned char)CHAR_CONST_TRANSFORM(c,quote))<<shift;
         shift+=8;
       }else
         ierror(0);
       if(cnt>=charsperexp&&*s!=quote)
         break;
     }
-    EXPSKIP();
+    s=EXPSKIP(s);
     new=new_expr();
     new->type=NUM;
     new->c.val=val;
@@ -299,30 +297,23 @@ dummyexp:
 static expr *unary_expr(void)
 {
   expr *new;
-  char *m;
-  int len;
-  if(len=EXT_UNARY_NAME(s)){
-    m=s;
-    s+=len;
-  }else if(*s=='+'){
-    s++;
-    EXPSKIP();
+  int len,type;
+  if(len=EXT_UNARY_NAME(s))
+    type=EXT_UNARY_TYPE(s);
+  else if(len=T_PLUS(s)){
+    s=EXPSKIP(s+len);
     return primary_expr();
-  }else if(*s=='+'||*s=='-'||*s=='!'||*s=='~')
-    m=s++;
+  }else if(len=T_MINUS(s))  /* - */
+    type=NEG;
+  else if(len=T_NOT(s))  /* ! */
+    type=NOT;
+  else if(len=T_CPL(s))  /* ~ */
+    type=CPL;
   else
     return primary_expr();
-  EXPSKIP();
+  s=EXPSKIP(s+len);
   new=new_expr();
-  if(len)
-    new->type=EXT_UNARY_TYPE(m);
-  else if(*m=='-')
-    new->type=NEG;
-  else if(*m=='!')
-    new->type=NOT;
-  else if(*m=='~')
-    new->type=CPL;
-  else ierror(0);
+  new->type=type;
   new->left=primary_expr();
   return new;
 }  
@@ -330,22 +321,19 @@ static expr *unary_expr(void)
 static expr *shift_expr(void)
 {
   expr *left,*new;
-  char m;
+  int len;
   left=unary_expr();
-  EXPSKIP();
-  while((*s=='<'||*s=='>')&&s[1]==*s){
-    m=*s;
-    s+=2;
-    EXPSKIP();
+  s=EXPSKIP(s);
+  while((len=T_LSH(s))||(len=T_RSH(s))){  /* << or >> */
     new=new_expr();
-    if(m=='<')
+    if(T_LSH(s))
       new->type=LSH;
     else
       new->type=unsigned_shift?RSHU:RSH;
     new->left=left;
+    s=EXPSKIP(s+len);
     new->right=unary_expr();
     left=new;
-    EXPSKIP();
   }
   return left;
 }
@@ -353,14 +341,13 @@ static expr *shift_expr(void)
 static expr *and_expr(void)
 {
   expr *left,*new;
+  int len;
   left=shift_expr();
-  EXPSKIP();
-  while(*s=='&'&&s[1]!='&'){
-    s++;
-    EXPSKIP();
+  s=EXPSKIP(s);
+  while(len=T_BAND(s)){  /* & */
+    s=EXPSKIP(s+len);
     new=new_expr();
     new->type=BAND;
-    EXPSKIP();
     new->left=left;
     new->right=shift_expr();
     left=new;
@@ -371,14 +358,13 @@ static expr *and_expr(void)
 static expr *exclusive_or_expr(void)
 {
   expr *left,*new;
+  int len;
   left=and_expr();
-  EXPSKIP();
-  while(*s=='^'||*s=='~'){
-    s++;
-    EXPSKIP();
+  s=EXPSKIP(s);
+  while(len=T_XOR(s)){  /* ^ */
+    s=EXPSKIP(s+len);
     new=new_expr();
     new->type=XOR;
-    EXPSKIP();
     new->left=left;
     new->right=and_expr();
     left=new;
@@ -389,14 +375,13 @@ static expr *exclusive_or_expr(void)
 static expr *inclusive_or_expr(void)
 {
   expr *left,*new;
+  int len;
   left=exclusive_or_expr();
-  EXPSKIP();
-  while((*s=='|'&&s[1]!='|')||(*s=='!'&&s[1]!='=')){
-    s++;
-    EXPSKIP();
+  s=EXPSKIP(s);
+  while(len=T_BOR(s)){  /* | */
+    s=EXPSKIP(s+len);
     new=new_expr();
     new->type=BOR;
-    EXPSKIP();
     new->left=left;
     new->right=exclusive_or_expr();
     left=new;
@@ -407,29 +392,21 @@ static expr *inclusive_or_expr(void)
 static expr *multiplicative_expr(void)
 {
   expr *left,*new;
-  char m;
+  int len;
   left=inclusive_or_expr();
-  EXPSKIP();
-  while(*s=='*'||*s=='/'||*s=='%'){
-    m=*s++;
-    EXPSKIP();
+  s=EXPSKIP(s);
+  while((len=T_MUL(s))||(len=T_DIV(s))||(len=T_MOD(s))){  /* * or / or % */
     new=new_expr();
-    if(m=='/'){
-      if(*s=='/'){
-        s++;
-        new->type=MOD;
-      }
-      else
-        new->type=DIV;
-    }
-    else if(m=='*')
+    if(T_MUL(s))
       new->type=MUL;
+    else if(T_DIV(s))
+      new->type=DIV;
     else
       new->type=MOD;
     new->left=left;
+    s=EXPSKIP(s+len);
     new->right=inclusive_or_expr();
     left=new;
-    EXPSKIP();
   }
   return left;
 }
@@ -437,21 +414,16 @@ static expr *multiplicative_expr(void)
 static expr *additive_expr(void)
 {
   expr *left,*new;
-  char m;
+  int len;
   left=multiplicative_expr();
-  EXPSKIP();
-  while((*s=='+'&&s[1]!='+')||(*s=='-'&&s[1]!='-')){
-    m=*s++;
-    EXPSKIP();
+  s=EXPSKIP(s);
+  while((len=T_ADD(s))||(len=T_SUB(s))){  /* + or - */
     new=new_expr();
-    if(m=='+')
-      new->type=ADD;
-    else
-      new->type=SUB;
+    new->type=T_ADD(s)?ADD:SUB;
     new->left=left;
+    s=EXPSKIP(s+len);
     new->right=multiplicative_expr();
     left=new;
-    EXPSKIP();
   }
   return left;
 }
@@ -459,28 +431,21 @@ static expr *additive_expr(void)
 static expr *relational_expr(void)
 {
   expr *left,*new;
-  char m1,m2=0;
+  int len;
   left=additive_expr();
-  EXPSKIP();
-  while(((*s=='<'&&s[1]!='>')||*s=='>')&&s[1]!=*s){
-    m1=*s++;
-    if(*s=='=')
-      m2=*s++;
-    EXPSKIP();
+  s=EXPSKIP(s);
+  while((len=T_LEQ(s))||(len=T_GEQ(s))||(len=T_LT(s))||(len=T_GT(s))){
     new=new_expr();
-    if(m1=='<'){
-      if(m2)
-        new->type=LEQ;
-      else
-        new->type=LT;
-    }else{
-      if(m2)
-        new->type=GEQ;
-      else
-        new->type=GT;
-    }
-    EXPSKIP();
+    if(T_LEQ(s))  /* <= */
+      new->type=LEQ;
+    else if(T_GEQ(s))  /* >= */
+      new->type=GEQ;
+    else if(T_LT(s))  /* < */
+      new->type=LT;
+    else  /* > */
+      new->type=GT;
     new->left=left;
+    s=EXPSKIP(s+len);
     new->right=additive_expr();
     left=new;
   }
@@ -490,21 +455,14 @@ static expr *relational_expr(void)
 static expr *equality_expr(void)
 {
   expr *left,*new;
-  char m;
+  int len;
   left=relational_expr();
-  EXPSKIP();
-  while(*s=='='||(*s=='!'&&s[1]=='=')||(*s=='<'&&s[1]=='>')){
-    m=*s++;
-    if(m==*s||m!='=')
-      s++;
-    EXPSKIP();
+  s=EXPSKIP(s);
+  while((len=T_EQ(s))||(len=T_NEQ(s))){  /* == or != */
     new=new_expr();
-    if(m=='=')
-      new->type=EQ;
-    else
-      new->type=NEQ;
-    EXPSKIP();
+    new->type=T_EQ(s)?EQ:NEQ;
     new->left=left;
+    s=EXPSKIP(s+len);
     new->right=relational_expr();
     left=new;
   }
@@ -514,14 +472,13 @@ static expr *equality_expr(void)
 static expr *logical_and_expr(void)
 {
   expr *left,*new;
+  int len;
   left=equality_expr();
-  EXPSKIP();
-  while(*s=='&'&&s[1]=='&'){
-    s+=2;
-    EXPSKIP();
+  s=EXPSKIP(s);
+  while(len=T_LAND(s)){  /* && */
+    s=EXPSKIP(s+len);
     new=new_expr();
     new->type=LAND;
-    EXPSKIP();
     new->left=left;
     new->right=equality_expr();
     left=new;
@@ -532,14 +489,13 @@ static expr *logical_and_expr(void)
 static expr *expression(void)
 {
   expr *left,*new;
+  int len;
   left=logical_and_expr();
-  EXPSKIP();
-  while(*s=='|'&&s[1]=='|'){
-    s+=2;
-    EXPSKIP();
+  s=EXPSKIP(s);
+  while(len=T_LOR(s)){  /* || */
+    s=EXPSKIP(s+len);
     new=new_expr();
     new->type=LOR;
-    EXPSKIP();
     new->left=left;
     new->right=logical_and_expr();
     left=new;

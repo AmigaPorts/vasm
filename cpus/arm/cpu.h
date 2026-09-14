@@ -1,5 +1,5 @@
 /* cpu.h ARM cpu-description header-file */
-/* (c) in 2004,2014,2016 by Frank Wille */
+/* (c) in 2004,2014,2016,2025-2026 by Frank Wille */
 
 #define LITTLEENDIAN (!arm_be_mode)
 #define BIGENDIAN (arm_be_mode)
@@ -22,6 +22,32 @@
 typedef int32_t taddr;
 typedef uint32_t utaddr;
 
+/* literal pools */
+typedef struct ltentry {
+  struct ltentry *next;
+  symbol *base;
+  taddr value;
+  unsigned flags;
+} ltentry;
+#define LTE_USED 1      /* entry was used this pass */
+
+typedef struct ltpool {
+  unsigned id;
+  const char *name;
+  ltentry *ltlist;
+  size_t size;
+} ltpool;
+
+/* we use OPTS atoms for cpu-specific options */
+#define HAVE_CPU_OPTS 1
+typedef struct {
+  section *this_sec;  /* because cpu_opts() is lacking a section-ptr */
+  uint32_t cpu;
+  int endian;
+  int thumb;
+  ltpool *pool;
+} cpuopts;
+
 /* minimum instruction alignment */
 #define INST_ALIGN 0  /* Handled internally! */
 
@@ -33,6 +59,14 @@ typedef uint32_t utaddr;
 
 /* returns true when instruction is valid for selected cpu */
 #define MNEMONIC_VALID(i) cpu_available(i)
+
+#define HAVE_CPU_SECT_EXTENSION 1
+typedef struct {
+  ltpool *current_ltpool;
+} section_extc;
+
+/* cleanup function after parsing has finished */
+#define HAVE_CPU_CLEANUP_PARSE 1
 
 
 /* type to store each operand */
@@ -58,6 +92,7 @@ enum {
   DATA_OP,    /* data operand */
   DATA64_OP,  /* 64-bit data operand (greater than taddr) */
   BRA24,      /* 24-bit branch offset to label */
+  LTL12,      /* 12-bit PC-relative reference to literal, or MOV-constant */
   PCL12,      /* 12-bit PC-relative offset with up/down-flag to label */
   PCLCP,      /* 8-bit * 4 PC-relative offset with up/down-flag to label */
   PCLRT,      /* 8-bit rotated PC-relative offset to label */
@@ -164,7 +199,6 @@ typedef struct {
 
 /* register symbols */
 #define HAVE_REGSYMS
-#define REGSYMHTSIZE 256
 
 
 /* cpu types for availability check */

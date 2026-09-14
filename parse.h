@@ -1,5 +1,5 @@
 /* parse.h - global parser support functions */
-/* (c) in 2009-2025 by Volker Barthelmann and Frank Wille */
+/* (c) in 2009-2026 by Volker Barthelmann and Frank Wille */
 
 #ifndef PARSE_H
 #define PARSE_H 
@@ -42,7 +42,7 @@ struct namelen {
 };
 
 /* global variables */
-extern int esc_sequences,nocase_macros;
+extern int esc_sequences;
 extern int maxmacparams,maxmacrecurs;
 extern int msource_disable;
 
@@ -75,6 +75,7 @@ int copy_macro_qual(source *,int,char *,int);
 int new_structure(char *);
 int end_structure(section **);
 section *find_structure(char *,int);
+void set_nocase_macros(int);
 char *read_next_line(void);
 int init_parse(void);
 

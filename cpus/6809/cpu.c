@@ -9,7 +9,11 @@ mnemonic mnemonics[] = {
 };
 const int mnemonic_cnt = sizeof(mnemonics) / sizeof(mnemonics[0]);
 
-const char *cpu_copyright = "vasm 6809/6309/68hc12 cpu backend 0.5c (c)2020-2025 by Frank Wille";
+/* each lb<cc> branch must be following that many entries
+   behind the corresponding b<cc> in the mnemonic table */
+#define LBCCDIFF 3
+
+const char *cpu_copyright = "vasm 6809/6309/68hc12 cpu backend 0.5d (c)2020-2026 by Frank Wille";
 const char *cpuname = "6809";
 int bytespertaddr = 2;
 
@@ -935,9 +939,9 @@ static size_t process_instruction(instruction *ip,section *sec,
           switch (op->mode) {
             case AM_REL8:
               if ((pcd<-128 || pcd>127) &&
-                  (mnemonics[ip->code+2].operand_type[0] & OTMASK) == RLL) {
+                  (mnemonics[ip->code+LBCCDIFF].operand_type[0] & OTMASK) == RLL) {
                 op->mode = AM_REL16;
-                ip->code += 2;
+                ip->code += LBCCDIFF;
                 ocsz_diff = (mnemonics[ip->code].ext.opcode[OCSTD]>0xff? 2 : 1)
                             - (pc - orig_pc);
                 pc += ocsz_diff;       /* LBcc opcode may be larger */
@@ -947,9 +951,9 @@ static size_t process_instruction(instruction *ip,section *sec,
             case AM_REL16:
               ocsz_diff = 1 - (pc - orig_pc);
               if ((pcd>=-129+ocsz_diff && pcd<=126+ocsz_diff) &&
-                  (mnemonics[ip->code-2].operand_type[0] & OTMASK) == RLS) {
+                  (mnemonics[ip->code-LBCCDIFF].operand_type[0] & OTMASK) == RLS) {
                 op->mode = AM_REL8;
-                ip->code -= 2;
+                ip->code -= LBCCDIFF;
                 pc += ocsz_diff;       /* Bcc opcode may be smaller */
                 pcd += 1 - ocsz_diff;  /* adjust for Bcc and 8-bit branch */
               }

@@ -1,5 +1,5 @@
 /* source.h - source files, include paths and dependencies */
-/* (c) in 2020,2022,2024,2025 by Volker Barthelmann and Frank Wille */
+/* (c) in 2020,2022,2024-2026 by Volker Barthelmann and Frank Wille */
 
 #ifndef SOURCE_H
 #define SOURCE_H
@@ -70,6 +70,7 @@ extern char *compile_dir;
 extern int ignore_multinc,relpath,nocompdir,depend,depend_all;
 
 void write_depends(FILE *);
+FILE *locate_file(const char *,const char *,struct include_path **ipath_used,int *);
 source *new_source(char *,struct source_file *,char *,size_t);
 void end_source(source *);
 source *stdin_source(void);

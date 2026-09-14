@@ -1,5 +1,5 @@
 /* symbol.h - manage all kinds of symbols */
-/* (c) in 2014-2025 by Volker Barthelmann and Frank Wille */
+/* (c) in 2014-2026 by Volker Barthelmann and Frank Wille */
 
 #ifndef SYMBOL_H
 #define SYMBOL_H
@@ -35,9 +35,14 @@
 #define XDEF (1<<16)        /* must not remain at IMPORT-type */
 #define XREF (1<<17)        /* must stay IMPORT-type */
 #define SYMINDIR (1<<18)    /* expression with symbol indirection */
-#define RSRVD_C (1L<<20)    /* bits 20..23 are reserved for cpu modules */
-#define RSRVD_S (1L<<24)    /* bits 24..27 are reserved for syntax modules */
-#define RSRVD_O (1L<<28)    /* bits 28..31 are reserved for output modules */
+
+/* reserved flags for modules */
+#define SH_RSRVD_C 20       /* bits 20..23 are reserved for cpu modules */
+#define SH_RSRVD_S 24       /* bits 24..27 are reserved for syntax modules */
+#define SH_RSRVD_O 28       /* bits 28..31 are reserved for output modules */
+#define RSRVD_C (1L<<SH_RSRVD_C)
+#define RSRVD_S (1L<<SH_RSRVD_S)
+#define RSRVD_O (1L<<SH_RSRVD_O)
 
 struct symbol {
   struct symbol *next;
@@ -93,13 +98,17 @@ symbol *internal_abs(const char *);
 expr *set_internal_abs(const char *,taddr);
 
 #ifdef HAVE_REGSYMS
-void add_regsym(regsym *,int);
+int init_regsyms(size_t,int);
+#define init_regsyms_c(s) init_regsyms((s),0)
+#define init_regsyms_nc(s) init_regsyms((s),1)
+#define init_regsyms_sc(s) init_regsyms((s),nocase)
+void set_nocase_regsyms(int);
 regsym *find_regsym(const char *,int);
-regsym *find_regsym_nc(const char *,int);
-regsym *new_regsym(int,int,const char *,int,unsigned int,unsigned int);
-int undef_regsym(const char *,int,int);
+regsym *new_regsym(int,const char *,int,unsigned int,unsigned int);
+int undef_regsym(const char *,int);
 #endif /* HAVE_REGSYMS */
 
+void set_nocase_symbols(int);
 int init_symbol(void);
 void exit_symbol(void);
 

@@ -57,7 +57,6 @@ int x86_data_operand(int);
 
 /* register symbols */
 #define HAVE_REGSYMS
-#define REGSYMHTSIZE 64
 
 /* reg_flags: */
 #define RegRex	    0x1         /* Extended register.  */

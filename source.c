@@ -1,5 +1,5 @@
 /* source.c - source files, include paths and dependencies */
-/* (c) in 2020,2022,2024 by Volker Barthelmann and Frank Wille */
+/* (c) in 2020,2022,2024-2026 by Volker Barthelmann and Frank Wille */
 
 #include "vasm.h"
 #include "osdep.h"
@@ -28,23 +28,22 @@ void source_debug_init(int type,void *data)
 }
 
 
-static void add_depend(char *name)
+static void add_depend(const char *name)
 {
   if (depend) {
-    struct deplist *d = first_depend;
+    struct deplist *d;
 
     /* check if an entry with the same file name already exists */
-    while (d != NULL) {
-      if (!strcmp(d->filename,name))
+    if (name[0]=='.' && (name[1]=='/' || name[1]=='\\'))
+      name += 2;  /* skip "./" in paths */
+    for (d=first_depend; d; d=d->next) {
+      if (!filenamecmp(d->filename,name))
         return;
-      d = d->next;
     }
 
     /* append new dependency record */
     d = mymalloc(sizeof(struct deplist));
     d->next = NULL;
-    if (name[0]=='.'&&(name[1]=='/'||name[1]=='\\'))
-      name += 2;  /* skip "./" in paths */
     d->filename = mystrdup(name);
     if (last_depend)
       last_depend = last_depend->next = d;
@@ -83,7 +82,8 @@ void write_depends(FILE *f)
 }
 
 
-static FILE *open_path(char *compdir,char *path,char *name,char *mode)
+static FILE *open_path(char *compdir,char *path,const char *name,
+                       const char *mode)
 {
   char pathbuf[MAXPATHLEN];
   FILE *f;
@@ -103,8 +103,8 @@ static FILE *open_path(char *compdir,char *path,char *name,char *mode)
 }
 
 
-static FILE *locate_file(char *filename,char *mode,
-                         struct include_path **ipath_used,int *cdbased)
+FILE *locate_file(const char *filename,const char *mode,
+                  struct include_path **ipath_used,int *cdbased)
 {
   struct include_path *ipath;
   FILE *f;
@@ -138,7 +138,6 @@ static FILE *locate_file(char *filename,char *mode,
       }
     }
   }
-  general_error(12,filename);
   return NULL;
 }
 
@@ -302,6 +301,10 @@ source *include_source(char *inc_name)
         return NULL;
       }
     }
+    else {
+      general_error(12,filename);
+      return NULL;
+    }
   }
   else if (ignore_multinc)
     return NULL;  /* ignore multiple inclusion of this source completely */
@@ -370,7 +373,8 @@ void include_binary_file(char *inname,size_t nbskip,size_t nbkeep)
         general_error(46);  /* bad file-offset argument */
     }
     fclose(f);
-  }
+  }else
+    general_error(12,filename);
   myfree(filename);
 }
 

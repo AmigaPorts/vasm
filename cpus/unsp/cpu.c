@@ -9,7 +9,7 @@ mnemonic mnemonics[] = {
 };
 const int mnemonic_cnt = sizeof(mnemonics) / sizeof(mnemonics[0]);
 
-const char *cpu_copyright = "vasm unSP cpu backend 0.4 (c) 2021-2024 by Adrien Destugues";
+const char *cpu_copyright = "vasm unSP cpu backend 0.4a (c) 2021-2024 by Adrien Destugues";
 const char *cpuname = "unsp";
 
 int bytespertaddr = 2;
@@ -32,7 +32,7 @@ static int parse_reg(char **start)
     p++;
     while (ISIDCHAR(*p))
       p++;
-    if (sym = find_regsym_nc(*start,p-*start)) {
+    if (sym = find_regsym(*start,p-*start)) {
       *start = p;
       return sym->reg_num;
     }
@@ -139,7 +139,9 @@ int parse_operand(char *p,int len,operand *op,int required)
 
 
       if (check_indir(p, start+len, '(', ')')) {
+#if 0 /* unused: silence the warning */
         int   llen;
+#endif
         char *end;
         p++;
 
@@ -153,11 +155,15 @@ int parse_operand(char *p,int len,operand *op,int required)
         /* TODO Pre-decrement */
 
         /* Search for the first nonmatching character */
+#if 0
         if ( (end = strpbrk(p, ") +-") ) != NULL ) {
             llen = end - p;
         } else {
             llen = len - (p - start);
         }
+#else
+        end = strpbrk(p, ") +-");
+#endif
 
         if ((op->reg = parse_reg(&p)) >= 0) {
             /* It's a register */
@@ -622,7 +628,7 @@ dblock *eval_instruction(instruction *ip,section *sec,taddr pc)
   uint32_t extra;
 
   db->size = process_instruction(ip, sec, pc, &oc, &extra, db);
-  d = db->data = mymalloc(db->size);
+  d = db->data = mymalloc(OCTETS(db->size));
 
   /* write opcode */
   writebyte(d, oc);
@@ -653,7 +659,7 @@ dblock *eval_data(operand *op,size_t bitsize,section *sec,taddr pc)
     cpu_error(4,bitsize);  /* data size not supported */
 
   db->size = bitsize / 16;
-  db->data = mymalloc(db->size);
+  db->data = mymalloc(OCTETS(db->size));
 
   if (!eval_expr(op->value,&val,sec,pc)) {
     symbol *base;
@@ -688,14 +694,16 @@ int init_cpu(void)
   int i;
 
   /* define register symbols */
+  if (!init_regsyms_nc(64))
+    return 0;
   for (i=1; i<6; i++) {
     sprintf(r,"r%d",i);
-    new_regsym(0,1,r,RTYPE_R,0,i);
+    new_regsym(0,r,RTYPE_R,0,i);
   }
-  new_regsym(0,1,"sp",RTYPE_R,0,0);
-  new_regsym(0,1,"bp",RTYPE_R,0,5);
-  new_regsym(0,1,"sr",RTYPE_R,0,6);
-  new_regsym(0,1,"pc",RTYPE_R,0,7);
+  new_regsym(0,"sp",RTYPE_R,0,0);
+  new_regsym(0,"bp",RTYPE_R,0,5);
+  new_regsym(0,"sr",RTYPE_R,0,6);
+  new_regsym(0,"pc",RTYPE_R,0,7);
 
   return 1;
 }

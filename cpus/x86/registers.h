@@ -176,5 +176,4 @@
   {"st(5)", FloatReg, 0, 5},
   {"st(6)", FloatReg, 0, 6},
   {"st(7)", FloatReg, 0, 7},
-  {"rip", BaseIndex, 0, 0},
-  {NULL, 0, 0, 0}
+  {"rip", BaseIndex, 0, 0}
