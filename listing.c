@@ -181,7 +181,7 @@ static void print_list_header(FILE *f,int cnt)
 static void write_listing_old(char *listname,section *first_section)
 {
   FILE *f;
-  int nsecs,i,cnt=0;
+  int i,cnt=0;
   section *secp;
   listing *p;
   atom *a;
@@ -193,8 +193,6 @@ static void write_listing_old(char *listname,section *first_section)
     general_error(13,listname);
     return;
   }
-  for(nsecs=0,secp=first_section;secp;secp=secp->next)
-    secp->idx=nsecs++;
   for(p=first_listing;p;p=p->next){
     if(!p->src||p->src->id!=0)
       continue;
@@ -337,7 +335,6 @@ static void write_listing_old(char *listname,section *first_section)
   int bytew = (BITSPERBYTE + 3) / 4;
   unsigned long i,maxsrc=0;
   FILE *f;
-  int nsecs;
   section *secp;
   listing *p;
   atom *a;
@@ -348,8 +345,6 @@ static void write_listing_old(char *listname,section *first_section)
     general_error(13,listname);
     return;
   }
-  for(nsecs=1,secp=first_section;secp;secp=secp->next)
-    secp->idx=nsecs++;
   for(p=first_listing;p;p=p->next){
     char err[6];
     if(p->error!=0)
@@ -366,7 +361,7 @@ static void write_listing_old(char *listname,section *first_section)
         unsigned long size=a->content.db->size;
         for(i=0;i<size&&i<32;i++){
           if((i&15)==0)
-            fprintf(f,"\n               S%02d:%08lX: ",(int)(p->sec?p->sec->idx:0),(unsigned long)(pc));
+            fprintf(f,"\n               S%02d:%08lX: ",(int)(p->sec?p->sec->idx+1:0),(unsigned long)(pc));
           fprintf(f," %0*llX",bytew,
                   (unsigned long long)readbyte(a->content.db->data+OCTETS(i)));
           pc++;
@@ -384,7 +379,7 @@ static void write_listing_old(char *listname,section *first_section)
   }
   fprintf(f,"\n\nSections:\n");
   for(secp=first_section;secp;secp=secp->next)
-    fprintf(f,"S%02d  %s\n",(int)secp->idx,secp->name);
+    fprintf(f,"S%02d  %s\n",(int)secp->idx+1,secp->name);
   fprintf(f,"\n\nSources:\n");
   for(i=0;i<=maxsrc;i++){
     for(p=first_listing;p;p=p->next){
@@ -428,11 +423,9 @@ static void write_listing_wide(char *listname,section *first_section)
   }
 
   fprintf(f,"Sections:\n");
-  for (secp=first_section,i=0; secp; secp=secp->next,i++) {
-    secp->idx = i;
-    fprintf(f,"%02X: \"%s\" (%llX-%llX)\n",(unsigned)i,secp->name,
+  for (secp=first_section; secp; secp=secp->next)
+    fprintf(f,"%02X: \"%s\" (%llX-%llX)\n",(unsigned)secp->idx,secp->name,
             MADDR(secp->org),MADDR(secp->pc));
-  }
   fputc('\n',f);
 
   for (l=first_listing; l; l=l->next) {

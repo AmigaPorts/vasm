@@ -1,5 +1,5 @@
 /* expr.h expression handling for vasm */
-/* (c) in 2002-2020,2024 by Volker Barthelmann and Frank Wille */
+/* (c) in 2002-2020,2024-2026 by Volker Barthelmann and Frank Wille */
 
 #include "hugeint.h"
 
@@ -27,6 +27,74 @@ struct expr {
    parse_identifier() and get_local_label() */
 #define EXPBUFNO 2
 
+/* operator macros, return token length on match */
+#ifndef T_LOR
+#define T_LOR(s) ((*(s)=='|'&&(s)[1]=='|')?2:0)
+#endif
+#ifndef L_AND
+#define T_LAND(s) ((*(s)=='&'&&(s)[1]=='&')?2:0)
+#endif
+#ifndef T_EQ
+#define T_EQ(s) ((*(s)=='=')?1+((s)[1]=='='):0)
+#endif
+#ifndef T_NEQ
+#define T_NEQ(s) ((*(s)=='!'&&(s)[1]=='=')||(*(s)=='<'&&(s)[1]=='>')?2:0)
+#endif
+#ifndef T_LEQ
+#define T_LEQ(s) ((*(s)=='<'&&(s)[1]=='=')?2:0)
+#endif
+#ifndef T_GEQ
+#define T_GEQ(s) ((*(s)=='>'&&(s)[1]=='=')?2:0)
+#endif
+#ifndef T_LT
+#define T_LT(s) (*(s)=='<'&&(s)[1]!='='&&s[1]!='<')
+#endif
+#ifndef T_GT
+#define T_GT(s) (*(s)=='>'&&(s)[1]!='='&&s[1]!='>')
+#endif
+#ifndef T_ADD
+#define T_ADD(s) (*(s)=='+')
+#endif
+#ifndef T_SUB
+#define T_SUB(s) (*(s)=='-')
+#endif
+#ifndef T_MUL
+#define T_MUL(s) (*(s)=='*')
+#endif
+#ifndef T_DIV
+#define T_DIV(s) (*(s)=='/'&&(s)[1]!='/')
+#endif
+#ifndef T_MOD
+#define T_MOD(s) ((*(s)=='%'||(*(s)=='/'&&(s)[1]=='/'))?1+(*(s)=='/'):0)
+#endif
+#ifndef T_BOR
+#define T_BOR(s) ((*(s)=='|'&&(s)[1]!='|')||(*(s)=='!'&&(s)[1]!='='))
+#endif
+#ifndef T_XOR
+#define T_XOR(s) (*(s)=='^'||*(s)=='~')
+#endif
+#ifndef T_BAND
+#define T_BAND(s) (*(s)=='&'&&(s)[1]!='&')
+#endif
+#ifndef T_LSH
+#define T_LSH(s) ((*(s)=='<'&&(s)[1]=='<')?2:0)
+#endif
+#ifndef T_RSH
+#define T_RSH(s) ((*(s)=='>'&&(s)[1]=='>')?2:0)
+#endif
+#ifndef T_PLUS
+#define T_PLUS(s) (*(s)=='+')
+#endif
+#ifndef T_MINUS
+#define T_MINUS(s) (*(s)=='-')
+#endif
+#ifndef T_NOT
+#define T_NOT(s) (*(s)=='!')
+#endif
+#ifndef T_CPL
+#define T_CPL(s) (*(s)=='~')
+#endif
+
 /* Macros for extending the unary operation types (e.g. '<' and '>' for 6502).
    Cpu module has to define EXT_UNARY_EVAL(type,val,res,c) for evaluation. */
 #ifndef EXT_UNARY_NAME
@@ -34,6 +102,11 @@ struct expr {
 #endif
 #ifndef EXT_UNARY_TYPE
 #define EXT_UNARY_TYPE(s) NOT
+#endif
+
+/* syntax modules may optionally transform character constants */
+#ifndef CHAR_CONST_TRANSFORM
+#define CHAR_CONST_TRANSFORM(c,q) (c)
 #endif
 
 /* global variables */

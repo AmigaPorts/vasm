@@ -1,10 +1,9 @@
 /* parse.c - global parser support functions */
-/* (c) in 2009-2025 by Volker Barthelmann and Frank Wille */
+/* (c) in 2009-2026 by Volker Barthelmann and Frank Wille */
 
 #include "vasm.h"
 
 int esc_sequences;      /* do not handle escape sequences by default */
-int nocase_macros;      /* macro names are case-insensitive */
 int maxmacparams = MAXMACPARAMS;
 int maxmacrecurs = MAXMACRECURS;
 int msource_disable;    /* true: disable source level debugging within macro */
@@ -409,28 +408,28 @@ int check_indir(char *p,char *q,char p1,char p2)
 }
 
 
-static struct namelen *dirlist_match(char *s,char *e,struct namelen *list)
+static size_t dirlist_match(char *s,char *e,struct namelen *list)
 /* check if a directive from the list matches the current source location */
 {
+  size_t nlen,slen;
   char *name;
-  size_t len;
+  int nc;
 
-  if (!ISIDSTART(*s) || (!isspace((unsigned char )*(s-1)) && *(s-1)!='\0'))
-    return NULL;  /* cannot be start of directive */
+  if (!isspace((unsigned char )s[-1]) && s[-1]!='\0')
+    return 0;  /* cannot be start of directive */
 
-  name = s++;
-  while (s<e && ISIDCHAR(*s))
-    s++;
-
-  if (!isspace((unsigned char )*s) && *s!='\0')
-    return NULL;  /* cannot be end of directive */
-
-  while (len = list->len) {
-    if (s-name==len && !strnicmp(name,list->name,len))
-        return list;
-    list++;
+  for (nc=dirhash->nocase,slen=e-s; nlen=list->len; list++) {
+    name = list->name;
+    if (!dotdirs && *name=='.') {
+      name++;
+      nlen--;
+    }
+    if (slen>=nlen && (isspace((unsigned char)s[nlen]) || s[nlen]=='\0')) {
+      if (nc ? !strnicmp(s,name,nlen) : !strncmp(s,name,nlen))
+        return nlen;  /* matches directive from list */
+    }
   }
-  return NULL;
+  return 0;  /* no match */
 }
 
 
@@ -576,12 +575,10 @@ macro *new_macro(char *name,struct namelen *maclist,struct namelen *endmlist,
     if (m = find_macro(name,strlen(name))) {
       /* replace the old definition and warn about it */
       general_error(88,m->defline,m->defsrc->name);  /* macro redefinition */
-      rem_hashentry(macrohash,name,nocase_macros);
+      rem_hashentry(macrohash,name);
     }
     m = mymalloc(sizeof(macro));
     m->name = mystrdup(name);
-    if (nocase_macros)
-      strtolower(m->name);
     m->num_argnames = -1;
     m->argnames = m->defaults = NULL;
     m->recursions = 0;
@@ -593,12 +590,12 @@ macro *new_macro(char *name,struct namelen *maclist,struct namelen *endmlist,
       general_error(26,cur_src->name);  /* macro definition inside macro */
     m->defsrc = cur_src;
     m->defline = cur_src->line;
+    m->text = cur_src->srcptr;
 
     /* looking for name conflicts */
-    if (find_name_nc(mnemohash,name,&data)) {
+    if (find_name(mnemohash,name,&data)) {
       int idx;
 
-      m->text = cur_src->srcptr;
       for (idx=data.idx;
            idx<mnemonic_cnt && !stricmp(mnemonics[idx].name,name); idx++) {
         if (MNEMONIC_VALID(idx)) {
@@ -608,13 +605,11 @@ macro *new_macro(char *name,struct namelen *maclist,struct namelen *endmlist,
         }
       }
     }
-    else if ((dotdirs&&*name=='.'&&find_name_nc(dirhash,name+1,&data)) ||
-             (!dotdirs&&find_name_nc(dirhash,name,&data))) {
+    else if ((dotdirs&&*name=='.'&&find_name(dirhash,name+1,&data)) ||
+             (!dotdirs&&find_name(dirhash,name,&data))) {
       m->text = NULL;
       general_error(52);  /* name conflicts with directive */
     }
-    else
-      m->text = cur_src->srcptr;
 
     cur_macro = m;
     enddir_list = endmlist;
@@ -664,14 +659,8 @@ macro *find_macro(char *name,int name_len)
 {
   hashdata data;
 
-  if (nocase_macros) {
-    if (!find_namelen_nc(macrohash,name,name_len,&data))
-      return NULL;
-  }
-  else {
-    if (!find_namelen(macrohash,name,name_len,&data))
-      return NULL;
-  }
+  if (!find_namelen(macrohash,name,name_len,&data))
+    return NULL;
   return data.ptr;
 }
 
@@ -841,7 +830,7 @@ int leave_macro(void)
 int undef_macro(char *name)
 {
   if (find_macro(name,strlen(name))) {
-    rem_hashentry(macrohash,name,nocase_macros);
+    rem_hashentry(macrohash,name);
     return 1;
   }
   general_error(68);  /* macro does not exist */
@@ -963,7 +952,7 @@ static void add_macro(void)
       cur_macro->next = first_macro;
       first_macro = cur_macro;
       data.ptr = cur_macro;
-      add_hashentry(macrohash,cur_macro->name,data,nocase_macros);
+      add_hashentry(macrohash,cur_macro->name,data);
     }
     cur_macro = NULL;
   }
@@ -1020,7 +1009,7 @@ int new_structure(char *name)
   struct_prevsect = current_section;
   switch_offset_section(name,-1);
   data.ptr = cur_struct = current_section;
-  add_hashentry(structhash,cur_struct->name,data,nocase_macros);
+  add_hashentry(structhash,cur_struct->name,data);
   return 1;
 }
 
@@ -1043,15 +1032,8 @@ section *find_structure(char *name,int name_len)
 
   if (cur_struct!=NULL && !strcmp(cur_struct->name,name))
     general_error(55);  /* illegal structure recursion */
-
-  if (nocase_macros) {
-    if (!find_namelen_nc(structhash,name,name_len,&data))
-      return NULL;
-  }
-  else {
-    if (!find_namelen(structhash,name,name_len,&data))
-      return NULL;
-  }
+  if (!find_namelen(structhash,name,name_len,&data))
+    return NULL;
   return data.ptr;
 }
 
@@ -1122,14 +1104,14 @@ char *read_next_line(void)
   if (enddir_list!=NULL && (size_t)(srcend-s)>enddir_minlen) {
     /* reading a definition, like a macro or a repeat-block, until an
        end directive is found */
-    struct namelen *dir;
     int rept_nest = 1;
+    size_t dlen;
 
     if (nparam>=0 && cur_macro!=NULL)     /* @@@ needed? */
         general_error(26,cur_src->name);  /* macro definition inside macro */
 
     while (s <= (srcend-enddir_minlen)) {
-      if (dir = dirlist_match(s,srcend,enddir_list)) {
+      if (dlen = dirlist_match(s,srcend,enddir_list)) {
         if (cur_macro != NULL) {
           add_macro();  /* link macro-definition into hash-table */
           enddir_list = NULL;
@@ -1140,16 +1122,16 @@ char *read_next_line(void)
           enddir_list = NULL;
           break;
         }
-        s += dir->len;
+        s += dlen;
       }
       else if (cur_macro==NULL && reptdir_list!=NULL &&
-               (dir = dirlist_match(s,srcend,reptdir_list)) != NULL) {
-        s += dir->len;
+               (dlen = dirlist_match(s,srcend,reptdir_list)) != 0) {
+        s += dlen;
         rept_nest++;
       }
 #ifdef MACRO_IN_MACRO_CHECK  /* caution: misdetection in operands possible */
       else if (cur_macro!=NULL &&
-               (dir = dirlist_match(s,srcend,macrdir_list)) != NULL) {
+               (dlen = dirlist_match(s,srcend,macrdir_list)) != NULL) {
         general_error(26,cur_macro->name);  /* macro definition inside macro */
       }
 #endif
@@ -1247,7 +1229,8 @@ char *read_next_line(void)
       cur_src->linebuf = myrealloc(cur_src->linebuf,cur_src->bufsize);
       d = cur_src->linebuf + offs;
       if (debug)
-        printf("Doubled line buffer size to %lu bytes.\n",cur_src->bufsize);
+        printf("Doubled line buffer size to %lu bytes.\n",
+               (unsigned long)cur_src->bufsize);
     }
   }
 
@@ -1267,9 +1250,18 @@ char *read_next_line(void)
 }
 
 
+void set_nocase_macros(int nc)
+{
+  if (macrohash)
+    macrohash->nocase = nc<0 ? nocase : nc;
+  if (structhash)
+    structhash->nocase = nc<0 ? nocase : nc;
+}
+
+
 int init_parse(void)
 {
-  macrohash = new_hashtable(MACROHTABSIZE);
-  structhash = new_hashtable(STRUCTHTABSIZE);
+  macrohash = new_hashtable(MACROHTABSIZE,nocase);
+  structhash = new_hashtable(STRUCTHTABSIZE,nocase);
   return 1;
 }

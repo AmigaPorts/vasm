@@ -116,7 +116,6 @@ enum {
 
 /* register symbols */
 #define HAVE_REGSYMS
-#define REGSYMHTSIZE 64
 #define RTYPE_R  0       /* Register R0..R7 */
 
 /* exported by cpu.c */

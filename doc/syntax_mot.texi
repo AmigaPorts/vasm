@@ -399,17 +399,17 @@ CPU- and output-module support them):
 @item einline
       End a block of isolated local labels, started by @code{inline}.
 
+@item elif <exp>
+      This is a real else-if directive! Not supported by Devpac.
+      It's the same as @code{else} followed by @code{if}, but without the
+      need for a matching @code{endif} directive. Avoids nesting.
+
 @item else
       Assemble the following lines if the previous @code{if} condition
       was false.
 
 @item elseif
       Same as @code{else}, for compatibility!
-
-@item elif <exp>
-      This is a real else-if directive! Not supported by Devpac.
-      It's the same as @code{else} followed by @code{if}, but without the
-      need for a matching @code{endif} directive. Avoids nesting.
 
 @item end
       Assembly will terminate with this line. The subsequent source text
@@ -719,6 +719,10 @@ foo IIF bar equ 42
       Set the page length for a listing file to @code{<len>} lines.
       Currently ignored.
 
+@item popsection
+      Restore the top section from the internal section-stack and
+      activate it. Also refer to @code{pushsection}.
+
 @item printt <string>[,<string>...]
       Prints @code{<string>} to stdout. Every additional string into a new line.
       Quotes are optional.
@@ -731,10 +735,6 @@ foo IIF bar equ 42
       Flag @code{<symbol>} as an external symbol, which means that
       @code{<symbol>} is visible to all modules in the linking process.
       It may be either defined or undefined.
-
-@item popsection
-      Restore the top section from the internal section-stack and
-      activate it. Also refer to @code{pushsection}.
 
 @item pushsection
       Pushes the current section onto an internal stack, where it may be

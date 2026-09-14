@@ -1,5 +1,5 @@
 /* syntax.c  syntax module for vasm */
-/* (c) in 2015-2024 by Frank Wille */
+/* (c) in 2015-2026 by Frank Wille */
 
 #include "vasm.h"
 #include "error.h"
@@ -13,7 +13,7 @@
    be provided by the main module.
 */
 
-const char *syntax_copyright="vasm madmac syntax module 0.7a (c) 2015-2024 Frank Wille";
+const char *syntax_copyright="vasm madmac syntax module 0.7b (c) 2015-2026 Frank Wille";
 hashtable *dirhash;
 char commentchar = ';';
 int dotdirs;
@@ -30,16 +30,16 @@ static char endmname[] = ".endm";
 static char reptname[] = ".rept";
 static char endrname[] = ".endr";
 static struct namelen macro_dirlist[] = {
-  { 6,&macroname[0] }, { 5,&macroname[1] }, { 0,0 }
+  { 6,macroname }, { 0,0 }
 };
 static struct namelen endm_dirlist[] = {
-  { 5,&endmname[0] }, { 4,&endmname[1] }, { 0,0 }
+  { 5,endmname }, { 0,0 }
 };
 static struct namelen rept_dirlist[] = {
-  { 5,&reptname[0] }, { 4,&reptname[1] }, { 0,0 }
+  { 5,reptname }, { 0,0 }
 };
 static struct namelen endr_dirlist[] = {
-  { 5,&endrname[0] }, { 4,&endrname[1] }, { 0,0 }
+  { 5,endrname }, { 0,0 }
 };
 
 static char *labname;  /* current label field for assignment directives */
@@ -322,9 +322,9 @@ static void handle_assert(char *s)
     s = skip(s);
   }
   while (*s++ == ',');  /* another assertion, separated by comma? */
-
   s--;
-  add_atom(0,new_assert_atom(aexp,cnvstr(expstr,s-expstr),NULL));
+
+  add_or_save_atom(new_assert_atom(aexp,cnvstr(expstr,s-expstr),NULL));
   eol(s);
 }
 
@@ -535,7 +535,8 @@ static void handle_rept(char *s)
 
 static void handle_endr(char *s)
 {
-  syntax_error(12,endrname,reptname);  /* unexpected endr without rept */
+  /* unexpected endr without rept */
+  syntax_error(12,endrname+!dotdirs,reptname+!dotdirs);
 }
 
 
@@ -586,7 +587,8 @@ static void handle_macundef(char *s)
 
 static void handle_endm(char *s)
 {
-  syntax_error(12,endmname,macroname);  /* unexpected endm without macro */
+  /* unexpected endm without macro */
+  syntax_error(12,endmname+!dotdirs,macroname+!dotdirs);
 }
 
 
@@ -736,7 +738,7 @@ struct {
   "offset",handle_offset
 };
 
-int dir_cnt = sizeof(directives) / sizeof(directives[0]);
+static int dir_cnt = sizeof(directives) / sizeof(directives[0]);
 
 
 /* checks for a valid directive, and return index when found, -1 otherwise */
@@ -757,7 +759,7 @@ static int check_directive(char **line)
   }
   else
     dotdirs = 0;
-  if (!find_namelen_nc(dirhash,name,s-name,&data))
+  if (!find_namelen(dirhash,name,s-name,&data))
     return -1;
   *line = s;
   return data.idx;
@@ -1087,13 +1089,13 @@ int expand_macro(source *src,char **line,char *d,int dlen)
 
 int init_syntax(void)
 {
-  size_t i;
+  int i;
   hashdata data;
 
-  dirhash = new_hashtable(0x800);
+  dirhash = new_hashtable_nc(0x800);
   for (i=0; i<dir_cnt; i++) {
     data.idx = i;
-    add_hashentry(dirhash,directives[i].name,data,1);  /* case insensitive */
+    add_hashentry(dirhash,directives[i].name,data);  /* case insensitive */
   }
   if (debug && dirhash->collisions)
     fprintf(stderr,"*** %d directive collisions!!\n",dirhash->collisions);

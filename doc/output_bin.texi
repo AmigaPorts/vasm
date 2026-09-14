@@ -54,7 +54,7 @@ selected with the @option{-Fbin} option.
         which will be selected according to the target CPU.
     @item -join[=<address>]
         To be able to write multiple sections as a raw binary file this
-        option invokes a mini-linker, which joins all section's with
+        option invokes a mini-linker, which joins all sections with
         ascending addresses, regarding their alignment. The start address
         defaults to 0 when missing. Only simple PC-relative and absolute
         relocations are supported at the moment.

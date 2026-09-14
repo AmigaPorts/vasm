@@ -1,5 +1,5 @@
 /* vasm.c  main module for vasm */
-/* (c) in 2002-2025 by Volker Barthelmann */
+/* (c) in 2002-2026 by Volker Barthelmann */
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -10,14 +10,15 @@
 #include "stabs.h"
 #include "dwarf.h"
 
-#define _VER "vasm 2.0d"
-const char *copyright = _VER " (c) in 2002-2025 Volker Barthelmann";
+#define _VER "vasm 2.0e"
+const char *copyright = _VER " (c) in 2002-2026 Volker Barthelmann";
 #ifdef AMIGA
 #ifndef __AMIGADATE__
 #define __AMIGADATE__ __DATE__
 #endif
 static const char *_ver = "$VER: " _VER " " __AMIGADATE__ "\r\n";
 #endif
+const char *vasmname;  /* copyright string without the (c) part */
 
 /* The resolver will run another pass over the current section as long as any
    label location or atom size has changed. It fails on reaching MAXPASSES,
@@ -31,10 +32,14 @@ static const char *_ver = "$VER: " _VER " " __AMIGADATE__ "\r\n";
 /* global options */
 char *output_format="test";
 char *inname,*outname;
-int chklabels=1;
 int nocase,no_symbols,pic_check,unnamed_sections;
 unsigned space_init;
 taddr inst_alignment;
+#ifdef LOWMEM
+int chklabels;  /* no default checks on low-performance hosts */
+#else
+int chklabels=1;
+#endif
 
 /* global module options */
 int asciiout,secname_attr,warn_unalloc_ini_dat;
@@ -145,6 +150,7 @@ static void remove_unalloc_sects(void)
         prev->next = sec->next;
       else
         first_section = sec->next;
+      num_secs--;
     }
     else
       prev = sec;
@@ -275,9 +281,10 @@ static int resolve_section(section *sec)
       break;
     }
     extrapass=pass<=fastphase;
-    if(debug)
+    if(debug){
       printf("resolve_section(%s) pass %d%s",sec->name,pass,
              pass<=fastphase?" (fast)\n":"\n");
+    }
     sec->pc=sec->org;
     for(p=sec->first;p;p=p->next){
       sec->pc=pcalign(p,sec->pc);
@@ -369,15 +376,11 @@ static void resolve(void)
   bvtype *todo;
   int finished;
 
-  final_pass=0;
   if(debug)
     printf("resolve()\n");
-
-  for(num_secs=0, sec=first_section;sec;sec=sec->next)
-    sec->idx=num_secs++;
-
   todo=mymalloc(BVSIZE(num_secs));
   memset(todo,~(bvtype)0,BVSIZE(num_secs));
+  final_pass=0;
 
   do{
     finished=1;
@@ -405,7 +408,7 @@ static void assemble(void)
   convert_offset_labels();
   if(dwarf){
     dinfo.version=dwarf;
-    dinfo.producer=cnvstr(copyright,strchr(copyright,'(')-copyright-1);
+    dinfo.producer=vasmname;
     source_debug_init(1,&dinfo);
   }
   final_pass=1;
@@ -544,7 +547,6 @@ static void assemble(void)
     if(dwarf)
       dwarf_end_sequence(&dinfo,sec);
   }
-  remove_unalloc_sects();
   if(dwarf)
     dwarf_finish(&dinfo);
 }
@@ -559,7 +561,7 @@ static void undef_syms(void)
         general_error(22,sym->name);  /* undefined */
       else if (sym->flags&XDEF)
         general_error(86,sym->name);  /* missing definition */
-      else if (!(sym->flags&(REFERENCED|COMMON|WEAK)))
+      else if (!(sym->flags&(REFERENCED|COMMON|WEAK|VASMINTERN)))
         general_error(61,sym->name);  /* not referenced */
     }
   }
@@ -613,7 +615,7 @@ static void fix_labels(void)
             sym->type=base->type;
             sym->sec=base->sec;
             sym->pc=val;
-            sym->align=1;
+            sym->align=0;
           }
         }else
           general_error(53,sym->name);  /* non-relocatable expr. in equate */
@@ -668,6 +670,7 @@ static struct {
   int executable;
   int (*init)(char **,void (**)(FILE *,section *,symbol *),int (**)(char *));
 } out_formats[] = {
+  "aof",0,init_output_aof,
   "aout",0,init_output_aout,
   "bin",0,init_output_bin,
   "cdef",0,init_output_cdef,
@@ -709,12 +712,12 @@ static int init_main(void)
   int i;
   const char *mname;
   hashdata data;
-  mnemohash=new_hashtable(MNEMOHTABSIZE);
+  mnemohash=new_hashtable_nc(MNEMOHTABSIZE);
   i=0;
   while(i<mnemonic_cnt){
     data.idx=i;
     mname=mnemonics[i++].name;
-    add_hashentry(mnemohash,mname,data,1);  /* always case-insensitive */
+    add_hashentry(mnemohash,mname,data);
     while(i<mnemonic_cnt&&!strcmp(mname,mnemonics[i].name))
       mnemonics[i++].name=mname;  /* make sure the pointer is the same */
   }
@@ -932,30 +935,32 @@ void join_sections(section *firstsec,symbol *sym,utaddr pc)
 /* set current section, remember last */
 void set_section(section *s)
 {
-  atom *a;
+  if (current_section != s) {
+    atom *a;
 
 #if NOT_NEEDED
-  if (current_section!=NULL && !(current_section->flags & UNALLOCATED)) {
-    if (current_section->flags & ABSOLUTE)
-      prev_org = current_section;
-    else
-      prev_sec = current_section;
-  }
+    if (current_section!=NULL && !(current_section->flags & UNALLOCATED)) {
+      if (current_section->flags & ABSOLUTE)
+        prev_org = current_section;
+      else
+        prev_sec = current_section;
+    }
 #endif
 #if HAVE_CPU_OPTS
-  if (s!=NULL && !(s->flags & UNALLOCATED))
-    cpu_opts_init(s);  /* set initial cpu opts before the first atom */
+    if (s!=NULL && !(s->flags & UNALLOCATED))
+      cpu_opts_init(s);  /* set initial cpu opts before the first atom */
 #endif
 
-  if (s!=NULL && current_section!=NULL && (a=current_section->last) != NULL) {
-    if (a->type==LABEL && a->src==cur_src && a->line==cur_src->line) {
-      /* make sure a label on the same line as a section directive is
-         moved into this new section */
-      if (move_label_to_sec(a,s))
-        general_error(83);  /* label def. on the same line as a new section */
+    if (s!=NULL && current_section!=NULL && (a=current_section->last) != NULL) {
+      if (a->type==LABEL && a->src==cur_src && a->line==cur_src->line) {
+        /* make sure a label on the same line as a section directive is
+           moved into this new section */
+        if (move_label_to_sec(a,s))
+          general_error(83);  /* label def. on the same line as a new section */
+      }
     }
+    current_section = s;
   }
-  current_section = s;
 }
 
 /* creates a new section with given attributes and alignment;
@@ -981,6 +986,7 @@ section *new_section(const char *name,const char *attr,int align)
     p->padbytes=make_padding(sec_padding,p->pad,MAXPADSIZE*8);
   else
     p->padbytes=1;
+  p->idx=num_secs++;
   if(last_section)
     last_section=last_section->next=p;
   else
@@ -989,6 +995,9 @@ section *new_section(const char *name,const char *attr,int align)
   p->first=container_section.first;
   p->last=container_section.last;
   container_section.first=container_section.last=0;
+#if HAVE_CPU_SECT_EXTENSION
+  cpu_init_section(p);
+#endif
   return p;
 }
 
@@ -1004,19 +1013,6 @@ section *new_org(taddr org)
   sec->org = sec->pc = org;
   sec->flags |= ABSOLUTE;  /* absolute destination address */
   return sec;
-}
-
-/* switches current section to the section with the specified name */
-void switch_section(const char *name,const char *attr)
-{
-  section *p;
-  if(unnamed_sections)
-    name=name_from_attr(attr);
-  p=find_section(name,attr);
-  if(!p)
-    general_error(2,name);
-  else
-    set_section(p);
 }
 
 /* Switches current section to an offset section. Create a new section when
@@ -1110,15 +1106,19 @@ static void reset_rorg(section *s)
   s->flags &= ~IN_RORG;
 }
 
-/* end relocated ORG block in all sections after parsing */
-static void end_all_rorg(void)
+/* finalizing actions on all sections after parsing */
+static void cleanup_parse(void)
 {
   section *s;
 
   for (s=first_section; s; s=s->next) {
+    /* end relocated ORG block in all sections after parsing */
     if (s->flags & IN_RORG)
       reset_rorg(s);
   }
+#if HAVE_CPU_CLEANUP_PARSE
+  cpu_cleanup_parse(first_section);
+#endif
 }
 
 /* end a relocated ORG block */
@@ -1221,9 +1221,15 @@ int main(int argc,char **argv)
       debug=1;
       argv[i][0]=0;
     }
+    if(!strcmp("-nocase",argv[i])){
+      nocase=1;
+      argv[i][0]=0;
+    }
     if(!strcmp("-v",argv[i]))
       verbose=2;
+
   }
+  vasmname=cnvstr(copyright,strchr(copyright,'(')-copyright-1);
   if(!init_output(output_format))
     general_error(16,output_format);
   if(!output_bitsperbyte)
@@ -1346,10 +1352,6 @@ int main(int argc,char **argv)
     }
     if(!strcmp("-no-msrcdebug",argv[i])){
       msource_disable = 1;
-      continue;
-    }
-    if(!strcmp("-nocase",argv[i])){
-      nocase=1;
       continue;
     }
     if(!strcmp("-relpath",argv[i])){
@@ -1476,7 +1478,7 @@ int main(int argc,char **argv)
   if(!init_expr())
     general_error(10,"expr");
   parse();
-  end_all_rorg();
+  cleanup_parse();
   listena=0;
   if(errors==0||produce_listing)
     resolve();
@@ -1492,6 +1494,7 @@ int main(int argc,char **argv)
       listname="a.lst";
     write_listing(listname,first_section);
   }
+  remove_unalloc_sects();
   if(errors==0){
     if(depend&&dep_filename==NULL){
       /* dependencies to stdout, no object output */

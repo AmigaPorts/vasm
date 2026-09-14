@@ -3,7 +3,7 @@ microprocessor family.
 
 @section Legal
 
-    This module is written in 2002-2025 by Frank Wille and
+    This module is written in 2002-2026 by Frank Wille and
     is covered by the vasm copyright without modifications.
 
 
@@ -358,6 +358,10 @@ Mototola's M68000 family Programmer's Reference Manual. Additionally
 it supports ColdFire instructions as described in Motorola's ColdFire
 Microprocessor Family Programmer's Reference Manual.
 
+It also support the Apollo 68080 Core ISA, which is an FPGA CPU
+designed by the Apollo Team. Note, that this ISA is still under
+development and subject to change.
+
 The syntax for the scale factor in ColdFire @code{MAC} instructions is
 @code{<<} for left- and @code{>>} for right-shift. The scale factor may be
 appended as an optional operand, when needed.
@@ -537,6 +541,9 @@ directives:
         Default is off in Devpac-comptability mode, otherwise on.
       @item c
         Case-sensitivity for all symbols and macros. Default is on.
+        Note, that although you can change case-sensitivity multiple times in
+        a source text, you cannot expect to access symbols from a part with
+        different case-sensitivity.
       @item d
         Include all symbols for debugging in the output file. May also
         generate line debugging information in some output formats.
@@ -852,16 +859,19 @@ translations:
 @item @code{ADD.? #x,<ea>} optimized to @code{SUBQ.? #x,<ea>}, when @code{x} is
  between -1 and -8.
 
+@item @code{ADD.L #x,<ea>} optimized to @code{ADDIW.L #x,<ea>} for Apollo,
+when @code{x} is between -32768 and 32767.
+
 @item @code{ADDA.? #0,An} and @code{SUBA.? #0,An} will be deleted.
 
 @item @code{ADDA.? #x,An} translated to @code{LEA (x,An),An}, when @code{x} is
  between -32768 and 32767.
 
 @item @code{ANDI.L #$ff,Dn} optimized to @code{MVZ.B Dn,Dn},
- for ColdFire ISA_B/C.
+ for ColdFire ISA_B/C or @code{EXTUB.L Dn} for Apollo.
 
 @item @code{ANDI.L #$ffff,Dn} optimized to @code{MVZ.W Dn,Dn},
- for ColdFire ISA_B/C.
+ for ColdFire ISA_B/C or @code{EXTUW.L Dn} for Apollo.
 
 @item @code{ANDI.? #0,<ea>} optimized to @code{CLR.? <ea>}, when allowed
  by the option @option{-opt-clr} or a different CPU than the MC68000 was
@@ -905,6 +915,9 @@ the options @option{-opt-speed} and @option{-opt-lsl} are given.
 @item @code{CMP.? #0,<ea>} optimized to @code{TST.? <ea>}. The selected CPU type
  must be MC68020 up, ColdFire or CPU32 to support address register direct
  as effective address (@code{<ea>}).
+
+@item @code{CMP.L #x,<ea>} optimized to @code{CMPIW.L #x,<ea>} for Apollo,
+when @code{x} is between -32768 and 32767.
 
 @item @code{DIVS.W/DIVU.W #1,Dn} optimized to @code{MVZ.W Dn,Dn}, for
 ColdFire ISA_B/C (@option{-opt-div}).
@@ -1069,6 +1082,9 @@ and @code{NEG.L Dn} (@option{-opt-mul} and @option{-opt-speed}).
 @item @code{SUB.? #x,<ea>} optimized to @code{ADDQ.? #x,<ea>}, when @code{x} is
  between -1 and -8.
 
+@item @code{SUB.L #x,<ea>} optimized to @code{ADDIW.L #-x,<ea>} for Apollo,
+when @code{x} is between -32767 and 32768.
+
 @item @code{SUBA.? #x,An} translated to @code{LEA (-x,An),An}, when @code{x} is
  between -32767 and 32768.
 
@@ -1081,8 +1097,8 @@ and @code{NEG.L Dn} (@option{-opt-mul} and @option{-opt-speed}).
 @itemize @minus
 
 @item In some rare cases, mainly by stupid input sources, the optimizer
-might oscillate forever between two states. When this happens, assembly
-will be terminated automatically after some time.
+might oscillate forever between two states. If this happens, assembly
+will terminate automatically after some time.
 
 @item When using @code{FMOVE} immediate addressing modes, but without
 specifying a size extension, constants between @code{$80000000} and

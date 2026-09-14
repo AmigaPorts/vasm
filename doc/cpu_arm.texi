@@ -3,7 +3,7 @@ microprocessor family.
 
 @section Legal
 
-    This module is written in 2004,2006,2010-2015 by Frank Wille and
+    This module is written in 2004,2006,2010-2015,2025 by Frank Wille and
     is covered by the vasm copyright without modifications.
 
 
@@ -148,9 +148,34 @@ directives:
 @item .arm
       Generate 32-bit ARM code.
 
+@item .ltorg
+      Dump the contents of the current literal pool at this address
+      (aligned to 32 bits). Literal pool references from the following
+      lines will go into a new pool.
+
 @item .thumb
       Generate 16-bit THUMB code.
 @end table
+
+
+@section Literal Pool
+
+The @code{LDR} instruction will load constants or label addresses
+from a literal pool, if prefixed by @code{=}.
+Example:
+@example
+        ldr     r0,=0x12345678
+        ldr     r0,=label
+@end example
+The literal pool is managed automatically by this backend. Its position for
+literals from the current section can be defined by the @code{.ltorg}
+directive. Pool references from the code will always access the subsequent
+pool, at a higher address. Never the previous one. If there are still
+entries in the pool at the end of a section an automatic pool dump is
+enforced there.
+
+Optimizations are considered, to avoid unnecessary pool references (see
+below). Duplicate entries in a single pool are avoided.
 
 
 @section Optimizations
@@ -181,6 +206,9 @@ the ARM instruction set:
  Optionally you may specify the rotate constant yourself, as an
  additional operand.
 
+@item References to the literal pool are optimized to @code{MOV} (for
+ constants) or  @code{ADR} (for label addresses) whenever possible.
+
 @end itemize
 
 For the THUMB instruction set the following optimizations and translations
@@ -203,6 +231,7 @@ are done:
 
 @itemize @minus
 
+@item Literal pool for thumb-mode is not yet implemented.
 @item Only instruction sets up to ARM architecture V4t are supported.
 
 @end itemize
@@ -244,5 +273,6 @@ This module has the following error messages:
 @item 2029: TSTP/TEQP/CMNP/CMPP deprecated on 32-bit architectures
 @item 2030: rotate constant must be an even number between 0 and 30: %ld
 @item 2031: %d-bit unsigned constant required: %ld
+@item 2032: literal pool has no references
 
 @end itemize

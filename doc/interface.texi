@@ -629,15 +629,38 @@ expects a pointer to a symbol as argument.
 
 @end table
 
+The case-sensitivity of symbols defaults to case-sensitive, which can be
+changed by the command line option @option{-nocase}. Syntax- or cpu-modules
+may change it in their init-function, or even during parsing, by calling
+@code{set_nocase_symbols(int nc)} (where @code{nc=1} means case-insensitive,
+@code{nc=0} means case-sensitive and @code{nc=-1} resets to the state defined
+by the command line). But note, that you cannot expect to access symbols from
+a part of the input source with different case-sensitivity.
+
 @subsection Register symbols
 
 Optional register symbols are available when the backend defines
-@code{HAVE_REGSYMS} in @file{cpu.h} together with the hash table size.
-Example:
-@example
-#define HAVE_REGSYMS
-#define REGSYMHTSIZE 256
-@end example
+@code{HAVE_REGSYMS} in @file{cpu.h} and initializes the system before
+first use, typically during @code{init_cpu()}.
+
+For initialization you have to specify the hash table size and the
+case-sensitivity, using one of the following functions:
+@table @code
+@item int init_regsyms(size_t htsize,int no_case)
+  Initializes the register symbol hash table with the given size and
+  case-sensitivity (nonzero for case-insensitive).
+  Returns non-zero on success.
+@item int init_regsyms_c(size_t htsize)
+  Same as above, for case-sensitive symbols.
+@item int init_regsyms_nc(size_t htsize)
+  Same as above, for case-insensitive symbols.
+@item int init_regsyms_sc(size_t htsize)
+  Uses the symbol default case-sensitivity.
+@item void set_nocase_regsyms(int nc)
+  Change case-sensitivity for register symbols to case-insensitive (@code{nc==1}),
+  case-sensitive (@code{nc==0}) or using the symbol default (@code{nc==-1}).
+  The same note as for @code{set_nocase_symbols()} (see above) applies.
+@end table
 
 A register symbol is defined by an object of type @code{regsym}
 with the following members that can be accessed by the modules:
@@ -802,7 +825,7 @@ The cpu specific code of this instruction.
 
 @item  instruction_ext ext;
 (If the cpu backend defines @code{HAVE_INSTRUCTION_EXTENSION}.)
-A cpu-specific structure. Typically used to store appropriate
+A cpu-specific typedef. Typically used to store appropriate
 opcodes, allowed addressing modes, supported cpu derivates etc.
 @end table
 
@@ -1222,6 +1245,78 @@ Useful support functions for writing CPU-, Syntax- and Output-modules.
   Create a constant floating point expression from @code{val}.
 @end table
 
+Syntax modules may overwrite the default operator tokens from @file{expr.h}.
+Every token macro follows the syntax @code{T_NAME(s)}, where @code{char *s}
+points to the next token from the stream. The macro has to return the token
+length in characters on match or zero otherwise. Note, that the result of
+logical operations is transformed by the @code{BOOLEAN(x)} macro, which may
+be overwritten by a backend, for example to define True as -1 instead of
+the default 1.
+The following token macros are known (default token follows the macro name):
+@table @code
+@item T_LOR(s) ||
+  Logical Or.
+@item T_LAND(s) &&
+  Logical And.
+@item T_EQ(s) ==
+  Equality.
+@item T_NEQ(s) !=
+  Not equal.
+@item T_LEQ(s) <=
+  Lesser or equal.
+@item T_GEQ(s) >=
+  Greater or equal.
+@item T_LT(s) <
+  Lesser than.
+@item T_GT(s) >
+  Greater than.
+@item T_ADD(s) +
+  Addition.
+@item T_SUB(s) -
+  Subtraction.
+@item T_MUL(s) *
+  Multiplication.
+@item T_DIV(s) /
+  Division.
+@item T_MOD(s) %
+  Modulo.
+@item T_BOR(s) |
+  Bitwise Or.
+@item T_XOR(s) ^
+  Bitwise Exclusive Or.
+@item T_BAND(s) &
+  Bitwise And.
+@item T_LSH(s) <<
+  Shift Left.
+@item T_RSH(s) >>
+  Shift Right. May be signed or unsigned. A backend may set the global
+  variable @code{unsigned_shift} to non-zero. Defaults to signed.
+@item T_PLUS(s) +
+  Unary Plus operator. Is ignored.
+@item T_MINUS(s) -
+  Unary Negation operator.
+@item T_NOT(s) !
+  Unary logical Not.
+@item T_CPL(s) ~
+  Unary bitwise Complementation.
+@end table
+
+Expression evalulation priority for all these tokens cannot be modified,
+and is defined from highest to lowest:
+@enumerate 1
+@item @code{T_PLUS}, @code{T_MINUS}, @code{T_NOT}, @code{T_CPL}
+@item @code{T_LSH}, @code{T_RSH}
+@item @code{T_BAND}
+@item @code{T_XOR}
+@item @code{T_BOR}
+@item @code{T_MUL}, @code{T_DIV}, @code{T_MOD}
+@item @code{T_ADD}, @code{T_SUB}
+@item @code{T_LEQ}, @code{T_GEQ}, @code{T_LT}, @code{T_GT}
+@item @code{T_EQ}, @code{T_NEQ}
+@item @code{T_LAND}
+@item @code{T_LOR}
+@end enumerate
+
 @subsection Symbols
 @table @code
 @item symbol *new_abs(const char *name,expr *tree)
@@ -1239,17 +1334,109 @@ Useful support functions for writing CPU-, Syntax- and Output-modules.
 @item symbol *internal_abs(const char *name)
   Create an internal absolute symbol (type @code{EXPRESSION}), which gets
   the flag @code{VASMINTERN}, so it is never written into object files.
-@item regsym *new_regsym(int redef,int no_case,const char *name,int type,unsigned int flags,unsigned int num)
+@item regsym *new_regsym(int redef,const char *name,int type,unsigned int flags,unsigned int num)
+  (If @code{HAVE_REGSYMS} is set.)
   Create a new CPU register symbol with name @code{name} and number
   @code{num}. The @code{type} and @code{flags} can be used by the
   backend as needed (for example integer and floating point register type).
   A non-zero @code{redef} allows redefinition of a register symbol without
-  error message. A non-zero @code{no_case} defines that the case of the
-  symbol name is ignored.
+  error message.
 @item regsym *find_regsym(const char *name,int len)
+  (If @code{HAVE_REGSYMS} is set.)
   Find register symbol with @code{name} and @code{len} characters.
-@item regsym *find_regsym_nc(const char *name,int len)
-  Like above, but ignores the case of the symbol.
+@end table
+
+@subsection Macros, Structures and Repetitions
+@table @code
+@item macro *new_macro(char *name,struct namelen *maclist,struct namelen *endmlist,char *args)
+  Make the parser read a new macro with the given @code{name}, which has
+  @code{namelen} characters. @code{maclist} is a list of @code{struct namelen}
+  structures, which define all macro directive names currently known to the
+  syntax module and @code{endmlist} defines the directives which terminate a
+  macro definition. The parser will use these lists to parse and store the
+  body of the macro definition.
+  @code{args} may optionally point to a string of named macro arguments.
+  It is parsed by using the macros @code{SKIP_MACRO_ARGNAME},
+  @code{MACROS_ARG_OPTS} and @code{MACRO_ARG_SEP} from @file{syntax.h}.
+@item macro *find_macro(char *name,int name_len)
+  Find the macro using the name at @code{name} with @code{name_len}
+  characters.
+@item int execute_macro(char *name,int name_len,char **q,int *q_len,int nq,char *p)
+  Execute the macro with the given name (which is @code{name_len} characters
+  long).
+  If @code{nq} is greater than zero, @code{q} points to a list of qualifiers
+  (with their length in characters defined by @code{q_len}), provided the
+  cpu-backend supports qualifiers and they are not disabled for macros
+  (@code{NO_MACROS_QUALIFIERS}). Missing qualifiers are set to the CPU's
+  default (e.g. @code{.w} for m68k).
+  Finally, @code{p} points to a string of parameters passed into the macro.
+  An optional @code{EXEC_MACRO()} macro is called just before execution, when
+  defined by the syntax module.
+@item int leave_macro(void)
+  Terminate execution of the current macro (e.g. by a @code{mexit}
+  directive).
+@item int undef_macro(char *name)
+  Undefine this macro. It will be unknown for the remaining source text.
+@item int new_structure(char *name)
+  Start a structure definition using an offset-section with called @code{name}.
+@item int end_structure(section **prev)
+  End a structure definition and return the previously active section in
+  @code{prev}. The syntax module may then do some finalizing tasks and
+  switch back to this section.
+@item section *find_structure(char *name,int name_len)
+  Find and return the offset-section for the given structure name.
+  The functionality for "executing" the structure is in the syntax module.
+@item void new_repeat(int rcnt,char *name,char *vals,struct namelen *reptlist,struct namelen *endrlist)
+  Make the parser repeat the source text between the following line and any
+  end-repeat directive defined by @code{endrlist} @code{rcnt} times. Valid
+  repeat directives are defined by @code{reptlist} for nesting.
+  If @code{name} is not @code{NULL} then it defines an additional symbol name
+  to be set to the current iteration counter.
+  If @code{rcnt} is set to @code{REPT_IRP} then @code{vals} points to a
+  string of comma separated values, which are assigned one by one for every
+  iteration to the symbol with @code{name} (prefixed by a backslash).
+  If @code{rcnt} is set to @code{REPT_IRPC} then @code{vals} points to a
+  string of comma separated characters instead.
+@item void set_nocase_macros(int nc)
+  Change case-sensitivity for macro and structure names to case-insensitive
+  (@code{nc==1}), case-sensitive (@code{nc==0}) or using the symbol default
+  (@code{nc==-1}).
+@end table
+
+@subsection Hash Tables
+Modules may create hash tables for their own purpose with any size or
+case-sensitivity. Hash table entries have the type @code{hashdata}, which
+is a union with currently at least the following choices:
+@example
+typedef union hashdata @{
+  void *ptr;
+  unsigned idx;
+@} hashdata;
+@end example
+
+@table @code
+@item hashtable *new_hashtable(size_t sz, int no_case)
+  Create a new hash table with @code{sz} entries. The @code{no_case} parameter
+  defines whether names will be handled case-sensitive (@code{no_case==0})
+  or case-insensitive (@code{no_case==1}).
+@item hashtable *new_hashtable_c(size_t sz)
+  Create a new hash table with @code{sz} case-sensitive entries.
+@item hashtable *new_hashtable_nc(size_t sz)
+  Create a new hash table with @code{sz} case-insensitive entries.
+@item hashtable *new_hashtable_sc(size_t sz)
+  Create a new hash table with @code{sz} entries using the symbol default case-sensitivity.
+
+@item void add_hashentry(hashtable *ht,const char *name,hashdata d)
+  Make a hash table entry with @code{d} for the given @code{name}.
+@item void rem_hashentry(hashtable *ht,const char *name)
+  Remove the entry for @code{name} from the given hash table.
+@item int find_name(hashtable *ht,const char *name,hashdata *d)
+  Find @code{name} in the given hash table and return its hashdata in
+  @code{d}. The return code is zero when @code{name} doesn't exist.
+@item int find_namelen(hashtable *ht,const char *name,int len,hashdata *d)
+  Find an entry which matches the string at @code{name} with @code{len}
+  characters in the given hash table and return its hashdata in @code{d}.
+  The return code is zero when @code{name} doesn't exist.
 @end table
 
 @subsection Atoms
@@ -1393,6 +1580,12 @@ An optional function to be called just before a macro starts execution.
 Parameters and qualifiers are already parsed.
 Argument is the @code{source} pointer of the new macro.
 Defaults to unused.
+
+@item #define CHAR_CONST_TRANSFORM(c,q) (c)
+Define this if you want to transform character constant @code{c} in expressions
+according to the current state of the module and/or the character constant
+prefix @code{q}. Example: Set bit 7 on characters whenever the constant was
+prefixed by a @code{"} instead of @code{'}.
 
 @end table
 
@@ -1592,6 +1785,18 @@ If cpu-specific data should be added to all instruction atoms.
 @item typedef ... instruction_ext;
 Type for the above extension.
 
+@item #define HAVE_CPU_SECT_EXTENSION 1
+If cpu-specific data should be added to all sections.
+
+@item typedef ... section_extc;
+Type for the above extension.
+
+@item #define HAVE_CPU_CLEANUP_PARSE 1
+When defined, vasm calls the function @code{cpu_cleanup_parse(section *)},
+with a pointer to the first section, directly after parsing has finished
+and all atoms have been created. You can use it to modify the sections
+before assembly begins.
+
 @item #define CLEAR_OPERANDS_ON_START 1
 Backend requires zeroed operand structures when calling @code{parse_operand()}
 for the first time. Might be useful to parse operands only once.
@@ -1773,6 +1978,11 @@ change cpu type or optimization flags.
 @item print_cpu_opts(FILE *,void *);
 (If @code{HAVE_CPU_OPTS} is set.)
 Called from @code{print_atom()} to print an @code{OPTS} atom's contents.
+
+@item cpu_init_section(section *);
+(if @code{HAVE_CPU_SECT_EXTENSION} is set.)
+Gives you the possibility to initialize cpu-specific elements for any
+new sections. Refer to @code{section_extc} typedef.
 
 @end table
 

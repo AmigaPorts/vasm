@@ -38,6 +38,24 @@ struct ExtraDirectives {
 };
 static hashtable *cpudirhash;
 
+/* Overwritable bitstream/addressing mode selector prefix defaults.
+   Should return token length on match or zero. */
+#ifndef PFX6502_LO
+#define PFX6502_LO(p) (*(p)==lo_c)
+#endif
+#ifndef PFX6502_HI
+#define PFX6502_HI(p) (*(p)==hi_c)
+#endif
+#ifndef PFX6502_BK
+#define PFX6502_BK(p) (*(p)=='^'||*(p)=='`')
+#endif
+#ifndef PFX6502_WA
+#define PFX6502_WA(p) (*(p)=='!'||*(p)=='|')
+#endif
+#ifndef PFX6502_ID
+#define PFX6502_ID(p) (*(p)=='?')
+#endif
+
 
 void cpu_opts(void *opts)
 /* set cpu options for following atoms */
@@ -172,24 +190,25 @@ int parse_operand(char *p,int len,operand *op,int required)
       /* the expression. Their meaning is determined later in */
       /* eval_instruction() or eval_data() by the operand type, cpu */
       /* and accumular/index register width. */
-      if (pfx && *p==lo_c) {
-        p = skip(++p);
+      int m;
+      if (pfx && (m=PFX6502_LO(p))) {
+        p = skip(p+m);
         op->flags |= OF_LO;  /* low-byte or 8-bit addressing */
       }
-      else if (pfx && *p==hi_c) {
-        p = skip(++p);
+      else if (pfx && (m=PFX6502_HI(p))) {
+        p = skip(p+m);
         op->flags |= OF_HI;  /* high-byte or 16/24-bit addressing */
       }
-      else if (pfx==1 && (*p=='^' || *p=='`')) {
-        p = skip(++p);
+      else if (pfx==1 && (m=PFX6502_BK(p))) {
+        p = skip(p+m);
         op->flags |= OF_BK;  /* bank-byte */
       }
-      else if (pfx==1 && *p=='?') {
-        p = skip(++p);
+      else if (pfx==1 && (m=PFX6502_ID(p))) {
+        p = skip(p+m);
         op->flags |= OF_ID;  /* retrieve symbol's memory/bank ID-code */
       }
-      else if (pfx==2 && (*p=='!' || *p=='|')) {
-        p = skip(++p);
+      else if (pfx==2 && (m=PFX6502_WA(p))) {
+        p = skip(p+m);
         op->flags |= OF_WA;  /* force 16-bit addressing mode */
       }
       op->value = parse_expr(&p);
@@ -419,7 +438,7 @@ char *parse_cpu_special(char *start)
     s++;
     while (ISIDCHAR(*s))
       s++;
-    if (find_namelen_nc(cpudirhash,name,s-name,&data)) {
+    if (find_namelen(cpudirhash,name,s-name,&data)) {
       if (cpu_type & cpudirs[data.idx].avail) {
         s = cpudirs[data.idx].func(skip(s));
         eol(s);
@@ -922,7 +941,7 @@ dblock *eval_instruction(instruction *ip,section *sec,taddr pc)
           case INDIRX:
           case LINDIR:
           case REL16:
-	  case IMMED16:
+          case IMMED16:
             d = setval(0,d,2,val);
             break;
           case LABS:
@@ -931,9 +950,9 @@ dblock *eval_instruction(instruction *ip,section *sec,taddr pc)
             break;
           case QDPIND:
           case QDPINDZ:
-	    *d = d[-1];
-	    d[-1] = 0xea;  /* MEGA65 32-bit indirect prefix */
-	    d++;
+            *d = d[-1];
+            d[-1] = 0xea;  /* MEGA65 32-bit indirect prefix */
+            d++;
           case DPAGE:
           case DPAGEX:
           case DPAGEY:
@@ -1127,10 +1146,10 @@ int init_cpu(void)
     }
   }
 
-  cpudirhash = new_hashtable(0x100);
+  cpudirhash = new_hashtable_nc(0x100);
   for (i=0; i<sizeof(cpudirs)/sizeof(cpudirs[0]); i++) {
     data.idx = i;
-    add_hashentry(cpudirhash,cpudirs[i].name,data,1);  /* case insensitive */
+    add_hashentry(cpudirhash,cpudirs[i].name,data);
   }
   if (debug && cpudirhash->collisions)
     fprintf(stderr,"*** %d cpu directive collisions!!\n",cpudirhash->collisions);

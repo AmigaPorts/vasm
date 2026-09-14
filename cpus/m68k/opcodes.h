@@ -1753,8 +1753,8 @@
   "movea",    {A_,VX},      {{RLO,MEA},        {0x0008,0},2|WL|S_MOVE,malias|apollo|mbanked}, 
   "movec",    {_CTRL,R_},   {{ELC,C2H},        {0x4e7a,0},2|L|S_NONE,m68010up},
   "movec",    {R_,_CTRL},   {{C2H,ELC},        {0x4e7b,0},2|L|S_NONE,m68010up|mcf},
-  "moviw",    {QI,NI},      {{S16,SEA},        {0xa200,0},2|L|S_NONE,apollo},
-  "moviw",    {QI,VX},      {{S16,RLO},        {0xa200,0},3|L|S_NONE,apollo|mbanked},
+  "moviw",    {QI,NI},      {{S16,MEA},        {0x303d,0},2|L|S_NONE,apollo},
+  "moviw",    {QI,VX},      {{S16,RHI},        {0x303d,0},3|L|S_NONE,apollo|mbanked},
   "movem",    {RL,PA},      {{D2R,SEA},        {0x4880,0},2|WL|S_WL6,m68000up},
   /* three src-RL must be followed by three dest-RL with swapped operands */
   "movem",    {RL,CFMM},    {{D16,SEA},        {0x4880,0},2|CFWL|S_WL6,mcf},

@@ -13,7 +13,7 @@ int isidchar(char);
 
 /* we have a special skip() function for expressions, called exp_skip() */
 char *exp_skip(char *);
-#define EXPSKIP() s=exp_skip(s)
+#define EXPSKIP(p) exp_skip(p)
 
 /* support for broken negative hex-constants: $-hex */
 #define BROKEN_HEXCONST

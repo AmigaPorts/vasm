@@ -1,6 +1,6 @@
 /*
 ** cpu.h Motorola M68k, CPU32 and ColdFire cpu-description header-file
-** (c) in 2002,2006-2024 by Frank Wille
+** (c) in 2002,2006-2026 by Frank Wille
 */
 
 #define BIGENDIAN 1
@@ -438,8 +438,6 @@ struct cpu_models {
 
 /* register symbols */
 #define HAVE_REGSYMS
-#define REGSYMHTSIZE 256
-
 #define RSTYPE_Dn   0
 #define RSTYPE_An   1
 #define RSTYPE_FPn  2

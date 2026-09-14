@@ -1,3 +1,9 @@
+/*
+ * Important rules:
+ * Long branch directives lb<cc> MUST follow a constant number of entries
+ * behind their corresponding 8-bit b<cc> versions, to be recognized by the
+ * optimizer. The distance in entries is defined by LBCCDIFF in cpu.c.
+ */
   "aba",   {INH            }, {0x1807,    NA,    NA,    NA, HC12},
   "absa",  {INH            }, {  0xcc,    NA,    NA,    NA, KONAMI2},
   "absb",  {INH            }, {  0xcd,    NA,    NA,    NA, KONAMI2},
@@ -486,8 +492,8 @@
   "xgdx",  {INH            }, {0xb7c5,    NA,    NA,    NA, HC12},
   "xgdy",  {INH            }, {0xb7c6,    NA,    NA,    NA, HC12},
   "bsr",   {RLS            }, {  0x8d,    NA,    NA,    NA, M6809|TURBO9|HD6309},
-  "bsr",   {RLS            }, {  0x07,    NA,    NA,    NA, HC12},
   "bsr",   {RLS            }, {  0xaa,    NA,    NA,    NA, KONAMI2},
+  "bsr",   {RLS            }, {  0x07,    NA,    NA,    NA, HC12},
   "lbsr",  {RLL            }, {  0x17,    NA,    NA,    NA, M6809|TURBO9|HD6309},
   "lbsr",  {RLL            }, {  0xab,    NA,    NA,    NA, KONAMI2},
   "bra",   {RLS            }, {  0x20,    NA,    NA,    NA, M6809|TURBO9|HD6309},

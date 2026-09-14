@@ -5,7 +5,7 @@ which is available with the extension @code{oldstyle}.
 
 @section Legal
 
-    This module is written in 2002-2025 by Frank Wille and
+    This module is written in 2002-2026 by Frank Wille and
     is covered by the vasm copyright without modifications.
 
 
@@ -47,6 +47,10 @@ This syntax module provides the following additional options:
  @code{text} directive for creating string-constants and the @code{data}
  directive for creating byte-constants are no longer available. But there
  are still other directives for the same purpose.
+
+@item -spcequ
+ Allow assignment directives (like @code{=}, @code{EQU}, etc.) for symbols
+ which do not start on the first column.
 
 @end table
 
@@ -219,6 +223,9 @@ CPU- and output-module allow it):
 @item byte <exp1>[,<exp2>,"<string1>"...]
       Equivalent to @code{byt <exp1>[,<exp2>,"<string1>"...]}.
 
+@item cond <expression>
+      Conditionally assemble the following lines if <expression> is non-zero.
+
 @item di8 <exp1>[,<exp2>...]
       Assign the values of the operands into successive 8-bit memory cells
       of the current section.
@@ -332,6 +339,9 @@ CPU- and output-module allow it):
 
 @item end
       Assembly will terminate behind this line.
+
+@item endc
+      Ends a section of conditional assembly.
 
 @item endif
       Ends a section of conditional assembly.

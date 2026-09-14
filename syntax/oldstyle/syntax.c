@@ -1,5 +1,5 @@
 /* syntax.c  syntax module for vasm */
-/* (c) in 2002-2025 by Frank Wille */
+/* (c) in 2002-2026 by Frank Wille */
 
 #include "vasm.h"
 
@@ -12,7 +12,7 @@
    be provided by the main module.
 */
 
-const char *syntax_copyright="vasm oldstyle syntax module 0.21a (c) 2002-2025 Frank Wille";
+const char *syntax_copyright="vasm oldstyle syntax module 0.22 (c) 2002-2026 Frank Wille";
 hashtable *dirhash;
 int dotdirs;
 
@@ -26,39 +26,26 @@ char commentchar=';';
 
 static char macroname[] = ".macro";
 static char endmname[] = ".endmacro";
-static char endrname[] = ".endrepeat";
-static char reptname[] = ".rept";
 static char repeatname[] = ".repeat";
+static char endrname[] = ".endrepeat";
 static struct namelen macro_dirlist[] = {
-  { 5,&macroname[1] }, { 3,&macroname[1] }, { 0,0 }
+  { 6,macroname }, { 4,macroname }, { 0,0 }
 };
 static struct namelen endm_dirlist[] = {
-  { 4,&endmname[1] }, { 6,&endmname[1] }, { 8,&endmname[1] }, { 0,0 }
+  { 5,endmname }, { 7,endmname }, { 9,endmname }, { 0,0 }
 };
 static struct namelen rept_dirlist[] = {
-  { 4,&reptname[1] }, { 6,&repeatname[1] }, { 0,0 }
+  { 5,".rept" }, { 7,repeatname }, { 0,0 }
 };
 static struct namelen endr_dirlist[] = {
-  { 4,&endrname[1] }, { 6,&endrname[1] }, { 9,&endrname[1] }, { 0,0 }
-};
-static struct namelen dmacro_dirlist[] = {
-  { 6,&macroname[0] }, { 4,&macroname[0] }, { 0,0 }
-};
-static struct namelen dendm_dirlist[] = {
-  { 5,&endmname[0] }, { 7,&endmname[0] }, { 9,&endmname[0] }, { 0,0 }
-};
-static struct namelen drept_dirlist[] = {
-  { 5,&reptname[0] }, { 7,&repeatname[0] }, { 0,0 }
-};
-static struct namelen dendr_dirlist[] = {
-  { 5,&endrname[0] }, { 7,&endrname[0] }, { 10,&endrname[0] }, { 0,0 }
+  { 5,endrname }, { 7,endrname }, { 10,endrname }, { 0,0 }
 };
 
 static char local_modif_name[] = "_";  /* ._ for abyte directive */
 static char current_pc_str[2];
 
 static int autoexport,parse_end,nocprefix,nointelsuffix;
-static int astcomment,dot_idchar,sect_directives;
+static int astcomment,dot_idchar,sect_directives,spcequ;
 static taddr orgmode = ~0;
 static section *last_alloc_sect;
 static taddr dsect_offs;
@@ -342,11 +329,13 @@ static void handle_uspace(char *s,int size)
 }
 
 
+#if BITSPERBYTE == 8
 static void handle_fixedspc(char *s,int nb)
 {
   do_space(8,number_expr(nb),0);
   eol(s);
 }
+#endif
 
 
 static void handle_d8(char *s)
@@ -594,7 +583,7 @@ static void handle_end(char *s)
 
 static void handle_fail(char *s)
 {
-  add_atom(0,new_assert_atom(NULL,NULL,mystrdup(s)));
+  add_or_save_atom(new_assert_atom(NULL,NULL,mystrdup(s)));
 }
 
 
@@ -935,7 +924,6 @@ static void handle_assert(char *s)
   char *expstr,*msgstr=NULL;
   size_t explen;
   expr *aexp;
-  atom *a;
 
   expstr = skip(s);
   aexp = parse_expr(&s);
@@ -949,8 +937,7 @@ static void handle_assert(char *s)
       msgstr = mystrdup(buf->str);
   }
 
-  a = new_assert_atom(aexp,cnvstr(expstr,explen),msgstr);
-  add_atom(0,a);
+  add_or_save_atom(new_assert_atom(aexp,cnvstr(expstr,explen),msgstr));
 }
 
 
@@ -1015,16 +1002,15 @@ static void handle_rept(char *s)
         itername = name->str;
     }
   }
-  new_repeat(cnt<0?0:cnt,itername,NULL,
-             dotdirs?drept_dirlist:rept_dirlist,
-             dotdirs?dendr_dirlist:endr_dirlist);
+  new_repeat(cnt<0?0:cnt,itername,NULL,rept_dirlist,endr_dirlist);
   eol(s);
 }
 
 
 static void handle_endr(char *s)
 {
-  syntax_error(12,&endrname[1],&repeatname[1]);  /* unexpected endr without rept */
+  syntax_error(12,endrname+!dotdirs,
+               repeatname+!dotdirs);  /* unexpected endr without rept */
 }
 
 
@@ -1041,8 +1027,7 @@ static void handle_macro(char *s)
       eol(s);
       s = NULL;
     }
-    new_macro(name->str,dotdirs?dmacro_dirlist:macro_dirlist,
-              dotdirs?dendm_dirlist:endm_dirlist,s);
+    new_macro(name->str,macro_dirlist,endm_dirlist,s);
   }
   else
     syntax_error(10);  /* identifier expected */
@@ -1051,7 +1036,8 @@ static void handle_macro(char *s)
 
 static void handle_endm(char *s)
 {
-  syntax_error(12,&endmname[1],&macroname[1]);  /* unexpected endm without macro */
+  syntax_error(12,endmname+!dotdirs,
+               macroname+!dotdirs);  /* unexpected endm without macro */
 }
 
 
@@ -1286,6 +1272,7 @@ struct {
   "ifused",handle_ifused,
   "ifnused",handle_ifnused,
 #endif
+  "cond",handle_ifne,
   "if",handle_ifne,
   "else",handle_else,
   "el",handle_else,
@@ -1294,6 +1281,7 @@ struct {
   "ei",handle_endif,  /* clashes with cpu mnemonic */
 #endif
   "fi",handle_endif,  /* GMGM */
+  "endc",handle_endif,
   "incbin",handle_incbin,
   "mdat",handle_incbin,
   "incdir",handle_incdir,
@@ -1342,7 +1330,7 @@ struct {
   "space",handle_listspace
 };
 
-int dir_cnt = sizeof(directives) / sizeof(directives[0]);
+static int dir_cnt = sizeof(directives) / sizeof(directives[0]);
 
 
 /* checks for a valid directive, and return index when found, -1 otherwise */
@@ -1359,7 +1347,7 @@ static int check_directive(char **line)
     s++;
   if (*name=='.' && dotdirs)
     name++;
-  if (!find_namelen_nc(dirhash,name,s-name,&data))
+  if (!find_namelen(dirhash,name,s-name,&data))
     return -1;
   *line = s;
   return data.idx;
@@ -1549,6 +1537,8 @@ static char *parse_label_field(char **start,int *asntype)
         s = skip(s+1);
         spaced = 0;
       }
+      else if (spaced && !spcequ)
+        return NULL;  /* a spaced identifier is not a label, unless -spcequ */
 
       if (*s == '=') {
         spaced = 0;
@@ -1728,9 +1718,7 @@ void parse(void)
         s = line;
         if (!(buf = parse_identifier(0,&s)))
           ierror(0);
-        new_macro(buf->str,dotdirs?dmacro_dirlist:macro_dirlist,
-                  dotdirs?dendm_dirlist:endm_dirlist,
-                  ISEOL(params)?NULL:params);
+        new_macro(buf->str,macro_dirlist,endm_dirlist,ISEOL(params)?NULL:params);
         continue;
       }
 #ifdef PARSE_CPU_LABEL
@@ -2132,13 +2120,13 @@ strbuf *get_local_label(int n,char **start)
 
 int init_syntax(void)
 {
-  size_t i;
+  int i;
   hashdata data;
 
-  dirhash = new_hashtable(0x1000);
+  dirhash = new_hashtable_nc(0x1000);
   for (i=0; i<dir_cnt; i++) {
     data.idx = i;
-    add_hashentry(dirhash,directives[i].name,data,1);  /* case insensitive */
+    add_hashentry(dirhash,directives[i].name,data);
   }
   if (debug && dirhash->collisions)
     fprintf(stderr,"*** %d directive collisions!!\n",dirhash->collisions);
@@ -2182,6 +2170,8 @@ int syntax_args(char *p)
     dot_idchar = 1;
   else if (!strcmp(p,"-sect"))
     sect_directives = 1;
+  else if (!strcmp(p,"-spcequ"))
+    spcequ = 1;
   else
     return 0;
 

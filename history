@@ -1,6 +1,39 @@
 vasm history
 =============
 
+- 2.0e (24.02.26)
+o Fixed -nocase option for symbols, which was broken in last release.
+o New output module "aof" for the ARM/Acorn Object Format, used for example
+  by Acorn and 3DO.
+o New cpu backend for Wozniak's Sweet16 pseudo CPU (also useful as a simple
+  tutorial backend).
+o Fixed ".." include paths and misdetection of paths starting with '/' as
+  being absolute for AmigaOS hosts.
+o ARM: Support for automatic literal pools, when using the '=' operand-prefix
+  with LDR, to load any constant or label addresses to a register. Includes
+  optimization to MOV or ADR, if possible.
+  Literal pools are dumped with the ltorg directive, or automatically at
+  the end of any section.
+o ARM: Alternatively permit an SWI immediate operand with '#'.
+o m68k: Register symbol definitions should be case-insensitive in Devpac
+  compatibility mode.
+o m68k: Apollo: Adapted MOVEIW opcode for latest cores.
+o 6809: Fixed branch optimization/translation (-opt-branch), which was broken
+  since the introduction of Konami-support in V2.0c.
+o jagrisc: CPU-specific directives (.equr, etc.) with a leading dot were no
+  longer recognized since V1.8k, when no other dot-prefixed directive was
+  used before and the syntax module was "madmac".
+o std-syntax: ELF visibility types: .hidden, .internal, .protected.
+o oldstyle-syntax: ASSERT and FAIL directives should not create a default
+  section if no section exists at that point.
+o oldstyle-syntax: New option -spcequ removes the restriction that equate
+  symbols have to start on the first column.
+o oldstyle-syntax: Add COND and ENDC directives for compatibility.
+o elf-output: Support for visibility types.
+o tos-output: Alignments > 32 bit in data or bss could lead to corrupt output.
+o xfile-output: Alignments > 32 bit in data or bss could lead to corrupt
+  output.
+
 - 2.0d (23.11.25)
 o Improved performance of expression evaluation.
 o New output module "coff" for writing COFF object files. Currently supported

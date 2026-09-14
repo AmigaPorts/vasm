@@ -18,7 +18,13 @@ int bytespertaddr = 4;
 uint32_t cpu_type = CPUAny;
 static long cpudebug = 0;
 
-static regsym x86_regsyms[] = {
+/* all register names */
+static struct {
+  const char *name;
+  int type;
+  unsigned int flags;
+  unsigned int num;
+} x86_regs[] = {
 #include "registers.h"
 };
 
@@ -1497,7 +1503,7 @@ char *parse_instruction(char *s,int *inst_len,char **ext,int *ext_len,
       s++;
     len = s - inst;
 
-    if (find_namelen_nc(mnemohash,inst,len,&data)) {
+    if (find_namelen(mnemohash,inst,len,&data)) {
 #if 0  /*@@@ need a way to support prefixes at the same line with vasm */
       mnemonic *mnemo = &mnemonics[data.idx];
 
@@ -1538,7 +1544,7 @@ char *parse_instruction(char *s,int *inst_len,char **ext,int *ext_len,
         char x = *(s-1);
 
         if ((x=='b' || x=='w' || x=='l' || x=='s' || x=='q' || x=='x') &&
-            find_namelen_nc(mnemohash,inst,len-1,&data)) {
+            find_namelen(mnemohash,inst,len-1,&data)) {
           if ((mnemonics[data.idx].ext.opcode_modifier&NOSUF) != NOSUF) {
             /* a potential suffix found, save it */
             int cnt = *ext_cnt;
@@ -1590,7 +1596,7 @@ static regsym *parse_reg(char **pp)
         if (isdigit((unsigned char)*(p+1)) && *(p+2)==')')
           p += 3;
       }
-      if (r = find_regsym_nc(start,p-start)) {
+      if (r = find_regsym(start,p-start)) {
         if ((r->reg_flags & (RegRex64|RegRex)) && mode_flag!=CODE_64BIT)
           return NULL;
         *pp = p;
@@ -1904,8 +1910,8 @@ dblock *eval_data(operand *op,size_t bitsize,section *sec,taddr pc)
 
 int init_cpu(void)
 {
+  int regs_cnt = sizeof(x86_regs) / sizeof(x86_regs[0]);
   int i;
-  regsym *r;
 
   if (!(cpu_type & CPU64))
     cpu_type |= CPUNo64;
@@ -1947,9 +1953,11 @@ int init_cpu(void)
   }
 
   /* define all register symbols */
-  for (r=x86_regsyms; r->reg_name!=NULL; r++)
-    add_regsym(r,1);  /* case insensitive */
-
+  if (!init_regsyms_nc(512))
+    return 0;
+  for (i=0; i<regs_cnt; i++)
+    new_regsym(0,x86_regs[i].name,x86_regs[i].type,
+               x86_regs[i].flags,x86_regs[i].num);
   return 1;
 }
 

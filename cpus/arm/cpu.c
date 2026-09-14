@@ -1,6 +1,6 @@
 /*
 ** cpu.c ARM cpu-description file
-** (c) in 2004,2006,2010,2011,2014-2020,2024 by Frank Wille
+** (c) in 2004,2006,2010,2011,2014-2020,2024-2026 by Frank Wille
 */
 
 #include "vasm.h"
@@ -10,7 +10,7 @@ mnemonic mnemonics[] = {
 };
 const int mnemonic_cnt = sizeof(mnemonics)/sizeof(mnemonics[0]);
 
-const char *cpu_copyright = "vasm ARM cpu backend 0.5b (c) 2004,2006,2010,2011,2014-2020,2024 Frank Wille";
+const char *cpu_copyright = "vasm ARM cpu backend 0.6 (c) 2004,2006,2010,2011,2014-2020,2024-2026 Frank Wille";
 const char *cpuname = "ARM";
 int bytespertaddr = 4;
 
@@ -42,10 +42,10 @@ static const char *shift_strings[NUM_SHIFTTYPES] = {
   "LSL","LSR","ASR","ROR","RRX","ASL"
 };
 
-static int OC_SWP,OC_NOP;
-static int elfoutput = 0;       /* output will be an ELF object file */
+static int OC_SWP,OC_NOP,OC_LTORG,OC_MOVI,OC_ADR;
+static int elfoutput;           /* output will be an ELF object file */
 
-static section *last_section = 0;
+static section *last_section;
 static int last_data_type = -1; /* for mapping symbol generation */
 #define TYPE_ARM 0
 #define TYPE_THUMB 1
@@ -62,9 +62,142 @@ operand *new_operand(void)
 }
 
 
+void cpu_opts(void *opts)
+/* set cpu options for the following atoms */
+{
+  section *sec = ((cpuopts *)opts)->this_sec;
+
+  cpu_type = ((cpuopts *)opts)->cpu;
+  arm_be_mode = ((cpuopts *)opts)->endian;
+  thumb_mode = ((cpuopts *)opts)->thumb;
+  if (inst_alignment > 1)
+    inst_alignment = thumb_mode ? 2 : 4;
+
+  if (sec->extc.current_ltpool != ((cpuopts *)opts)->pool) {
+    /* set new literal pool and reset its contents */
+    ltentry *e;
+
+    if ((sec->extc.current_ltpool = ((cpuopts *)opts)->pool) != NULL) {
+      for (e=sec->extc.current_ltpool->ltlist; e; e=e->next)
+        e->flags &= ~LTE_USED;  /* mark all entries as ununsed */
+    }
+  }
+}
+
+
+void cpu_opts_init(section *s)
+/* add a current cpu opts atom */
+{
+  if (s == NULL)
+    s = current_section;
+  if (s) {
+    cpuopts *new = mymalloc(sizeof(cpuopts));
+
+    new->this_sec = s;
+    new->cpu = cpu_type;
+    new->endian = arm_be_mode;
+    new->thumb = thumb_mode;
+    new->pool = s->extc.current_ltpool;
+    add_atom(s,new_opts_atom(new));
+  }
+}
+
+
+void print_cpu_opts(FILE *f,void *opts)
+{
+  if (((cpuopts *)opts)->pool) {
+    fprintf(f,"opts: cpu=%#x be=%d thumb=%d pool=%u",
+            (unsigned)((cpuopts *)opts)->cpu,((cpuopts *)opts)->endian,
+            ((cpuopts *)opts)->thumb,((cpuopts *)opts)->pool->id);
+    if (((cpuopts *)opts)->pool->name == NULL)
+      fprintf(f,"(unused)");
+  }
+  else
+    fprintf(f,"opts: final");
+}
+
+
 int cpu_available(int idx)
 {
   return (mnemonics[idx].ext.available & cpu_type) != 0;
+}
+
+
+static ltpool *new_ltpool(void)
+{
+  static unsigned ltpool_idx;
+  char ltpool_name[16];
+  symbol *sym;
+  ltpool *p;
+
+  /* literal pool symbol - still undefined at this point */
+  sprintf(ltpool_name," ltp$%u",++ltpool_idx);
+  sym = new_import(ltpool_name);
+  sym->flags |= VASMINTERN;
+
+  /* allocate new pool and set its name */
+  p = mycalloc(sizeof(ltpool));
+  p->id = ltpool_idx;
+  p->name = sym->name;
+  return p;
+}
+
+
+void cpu_init_section(section *sec)
+{
+  sec->extc.current_ltpool = new_ltpool();
+}
+
+
+static void add_ltorg(section *sec,size_t align,int final)
+{
+  if (sec==NULL && current_section!=NULL)
+    sec = current_section;
+
+  if (sec->extc.current_ltpool!=NULL &&
+      sec->extc.current_ltpool->ltlist!=NULL) {
+    instruction *ip = mycalloc(sizeof(instruction));
+    atom *a;
+
+    /* add internal label for this pool */
+    add_atom(sec,new_label_atom(new_labsym(sec,sec->extc.current_ltpool->name)));
+
+    /* and a special instruction to dump the pool contents */
+    ip->code = OC_LTORG;
+    a = new_inst_atom(ip);
+    a->align = align;  /* label on same line should get same alignment */
+    add_atom(sec,a);
+
+    sec->extc.current_ltpool = final ? NULL : new_ltpool();
+    cpu_opts_init(sec);  /* OPTS atom to activate the new pool */
+  }
+  else
+    cpu_error(31);  /* literal pool has no references */
+}
+
+
+void cpu_cleanup_parse(section *sec)
+/* make sure to dump the last pool in each section, if needed */
+{
+  for (; sec; sec=sec->next) {
+    if (sec->extc.current_ltpool != NULL) {
+      if (sec->extc.current_ltpool->ltlist == NULL) {
+        /* last pool is empty - deactivate and remove its label */
+        symbol *lab;
+
+        if (lab = find_symbol(sec->extc.current_ltpool->name)) {
+          rem_symbol(lab);
+          sec->extc.current_ltpool->name = NULL;
+          sec->extc.current_ltpool = NULL;
+          cpu_opts_init(sec);
+        }
+        else
+          ierror(0);  /* symbol should at least exist as IMPORT */
+      }
+      else
+        add_ltorg(sec,bytespertaddr,1);  /* final pool dump */
+    }
+  }
 }
 
 
@@ -84,12 +217,18 @@ char *parse_cpu_special(char *start)
       thumb_mode = 1;
       if (inst_alignment > 1)
         inst_alignment = 2;
+      cpu_opts_init(NULL);
       return s;
     }
     else if (s-name==3 && !strncmp(name,"arm",3)) {
       thumb_mode = 0;
       if (inst_alignment > 1)
         inst_alignment = 4;
+      cpu_opts_init(NULL);
+      return s;
+    }
+    else if (s-name==5 && !strncmp(name,"ltorg",5)) {
+      add_ltorg(NULL,bytespertaddr,0);
       return s;
     }
   }
@@ -191,7 +330,7 @@ static int parse_reg(char **pp)
     p++;
     while (ISIDCHAR(*p))
       p++;
-    if (sym = find_regsym_nc(name,p-name)) {
+    if (sym = find_regsym(name,p-name)) {
       *pp = p;
       return sym->reg_num;
     }
@@ -216,7 +355,7 @@ static int parse_reglist(char **pp)
         name = p++;
         while (ISIDCHAR(*p))
           p++;
-        if (sym = find_regsym_nc(name,p-name)) {
+        if (sym = find_regsym(name,p-name)) {
           r = sym->reg_num;
           if (lastreg >= 0) {  /* range-mode? */
             if (lastreg < r) {
@@ -353,8 +492,11 @@ int parse_operand(char *p,int len,operand *op,int optype)
       char *q = p;
 
       /* check that this isn't any other valid operand */
-      if (*p=='#' || *p=='[' || *p=='{' || parse_reg(&q)>=0)
+      if (optype==TSWI8 && *p=='#')
+        p = skip(p+1);  /* # is optional for SWI */
+      else if (*p=='#' || *p=='[' || *p=='{' || parse_reg(&q)>=0)
         return PO_NOMATCH;
+
       op->value = parse_expr(&p);
     }
   }
@@ -366,6 +508,8 @@ int parse_operand(char *p,int len,operand *op,int optype)
 
     else if (STDOPER(optype)) {
       /* parse an expression (register, label, imm.) and assign to 'value' */
+      if (optype==SWI24 && *p=='#')
+        p = skip(p+1);  /* # is optional for SWI */
       if (IMMEDOPER(optype)) {
         if (*p++ != '#')
           return PO_NOMATCH;
@@ -398,8 +542,13 @@ int parse_operand(char *p,int len,operand *op,int optype)
         else
           return PO_NOMATCH;
       }
-      else  /* an expression */
+      else {  /* an expression */
+        if (optype == LTL12) {
+          if (*p++ != '=')
+            return PO_NOMATCH;
+        }
         op->value = parse_expr(&p);
+      }
 
       if (optype==R19PO || optype==R3UD1 || optype==IMUD1 || optype==IMCP1) {
         p = skip(p);
@@ -561,6 +710,55 @@ static void create_mapping_symbol(int type,section *sec,taddr pc)
     add_symbol(sym);
   }
   last_data_type = type;
+}
+
+
+static taddr lt_base_and_val(symbol **base,taddr val,ltpool *p,ltentry *e)
+{
+  symbol *sym;
+
+  if ((sym = find_symbol(p->name)) == NULL)
+    ierror(0);  /* pool label missing!? */
+  e->flags |= LTE_USED;
+  *base = sym;
+  return val;
+}
+
+
+static taddr ltpoolref(section *sec,symbol **base,taddr val)
+/* Get a base-symbol plus addend value from the current literal pool.
+   Make a new entry if not already existing.
+   Write base symbol (for non-constant values) to the given pointer
+   and return its addend (or constant value) directly. */
+{
+  symbol *b = *base;
+  taddr offs;
+  ltpool *p;
+  ltentry *e,*last_entry;
+
+  if ((p = sec->extc.current_ltpool) == NULL)
+    ierror(0);
+  if (p->name == NULL)
+    ierror(0);  /* pool was disabled for being unused after parsing */
+
+  for (e=p->ltlist,offs=0,last_entry=NULL; e; e=e->next,offs+=bytespertaddr) {
+    last_entry = e;
+    if (e->base==b && e->value==val)
+      return lt_base_and_val(base,offs,p,e);  /* return existing entry */
+  }
+
+  /* make new entry */
+  e = mycalloc(sizeof(ltentry));
+  e->base = b;
+  e->value = val;
+  if (last_entry)
+    last_entry->next = e;
+  else
+    p->ltlist = e;
+  if (p->size != offs)
+    ierror(0);
+  p->size += bytespertaddr;
+  return lt_base_and_val(base,offs,p,e);
 }
 
 
@@ -1004,6 +1202,68 @@ static int get_addrmode(instruction *ip)
 }
 
 
+static int do_pclrt(section *sec,dblock *db,uint32_t *insn,taddr val,int adrl)
+{
+  /* ADR/ADRL with known label from the same section */
+  uint32_t rotval;
+
+  if (val < 0) {
+    /* use SUB instead of ADD */
+    val = -val;
+    if (insn)
+      *insn ^= 0x00c00000;
+  }
+
+  if (!adrl && (rotval = rotated_immediate(val))!=ROTFAIL &&
+      !(sec->flags&RESOLVE_WARN)) {
+    if (insn)
+      *insn |= rotval;
+    return 0;  /* no extra instruction */
+  }
+  else if (opt_adr || adrl) {
+    /* ADRL or optimize ADR automatically to ADRL */
+    uint32_t hi,lo;
+
+    if ((lo = double_rot_immediate(val,&hi)) != ROTFAIL) {
+      /* ADD/SUB Rd,PC,#hi8rotated */
+      /* ADD/SUB Rd,Rd,#lo8rotated */
+      if (insn) {
+        *(insn+1) = *insn & ~0xf0000;
+        *(insn+1) |= (*insn&0xf000) << 4;
+        *insn++ |= hi;
+        *insn |= lo;
+      }
+      return 4;  /* one extra instruction */
+    }
+  }
+  return -1;  /* ADR/ADRL impossible */
+}
+
+
+static int do_extpclrt(dblock *db,symbol *base,uint32_t *insn,taddr val,int adrl)
+{
+  /* ADR/ADRL with external labels @@@ probably makes no sense */
+  if (adrl && val==0) {  /* ADRL */
+    if (insn!=NULL && db!=NULL) {
+      *(insn+1) = *insn & ~0xf0000;
+      *(insn+1) |= (*insn&0xf000) << 4;
+      add_extnreloc_masked(&db->relocs,base,val,REL_PC,
+                           arm_be_mode?24:0,8,0,0xff00);
+      add_extnreloc_masked(&db->relocs,base,val,REL_PC,
+                           arm_be_mode?32+24:32+0,8,0,0xff);
+    }
+    return 4;  /* one extra instruction */
+  }
+  else if (val == 0) {  /* ADR */
+    if (db)
+      add_extnreloc_masked(&db->relocs,base,val,REL_PC,
+                           arm_be_mode?24:0,8,0,0xff);
+      return 0;  /* no extra instruction */
+  }
+  return -1;  /* ADR/ADRL impossible */
+}
+
+
 size_t eval_arm_operands(instruction *ip,section *sec,taddr pc,
                          uint32_t *insn,dblock *db)
 /* evaluate expressions and try to optimize ARM instruction,
@@ -1078,9 +1338,8 @@ size_t eval_arm_operands(instruction *ip,section *sec,taddr pc,
 
   for (opcnt=0; opcnt<MAX_OPERANDS && ip->op[opcnt]!=NULL; opcnt++) {
     symbol *base = NULL;
-    uint32_t rotval;
     taddr val;
-    int btype;
+    int btype,add;
 
     op = *(ip->op[opcnt]);
     if (!eval_expr(op.value,&val,sec,pc))
@@ -1088,13 +1347,60 @@ size_t eval_arm_operands(instruction *ip,section *sec,taddr pc,
 
     /* do optimizations first */
 
+    if (op.type == LTL12) {
+      if (am==AM_T || am==AM_BT || am==AM_TB)
+        cpu_error(18,addrmode_strings[am]);  /* illegal addr. mode */
+
+      if (base!=NULL && btype==BASE_OK && !is_pc_reloc(base,sec)) {
+        /* label address from current section - this is like ADR */
+        uint32_t adr_oc;
+
+        if (insn)
+          adr_oc = mnemonics[OC_ADR].ext.opcode | (*insn&0xf0000000);
+        if ((add = do_pclrt(sec,db,insn?&adr_oc:NULL,
+                            val-(pc+ARM_PREFETCH),0)) >= 0) {
+          op.type = NOOP;  /* is handled here */
+          isize += add;
+          if (insn)
+            *insn = adr_oc;
+        }
+      }
+      else if (base == NULL) {
+        /* a constant may be represented by MOV rotated immediate */
+        uint32_t v;
+
+        if ((v = rotated_immediate(val)) != ROTFAIL) {
+          op.type = NOOP;  /* handled here */
+          if (insn)  /* MOV with rotated imm. and CC/Rd from orig. LDR */
+            *insn = mnemonics[OC_MOVI].ext.opcode | (*insn&0xf000f000) | v;
+        }
+        else {
+          v = mnemonics[OC_MOVI].ext.opcode;
+          if (negated_rot_immediate(val,&mnemonics[OC_MOVI],&v)) {
+            op.type = NOOP;  /* handled here */
+            if (insn) 
+              *insn = v | (*insn&0xf000f000);  /* get CC and Rd from orig. LDR */
+          }
+          /* Could try two rotation instructions here, but then a single
+             literal pool reference is probably better... */
+        }
+      }
+
+      if (op.type == LTL12) {
+        /* read address pointer or constant (base==NULL) from literal-pool */
+        val = ltpoolref(sec,&base,val);
+        btype = BASE_OK;
+        op.type = PCL12;
+      }
+    }
+
     if (op.type==PCL12 || op.type==PCLRT ||
         op.type==PCLCP || op.type==BRA24) {
       /* PC-relative offsets (take prefetch into account: PC+8) */
       if ((base!=NULL && btype==BASE_OK && !is_pc_reloc(base,sec)) ||
           base==NULL) {
         /* no relocation required, can be resolved immediately */
-        val -= pc + 8;
+        val -= pc + ARM_PREFETCH;
 
         switch (op.type) {
           case BRA24:
@@ -1103,7 +1409,7 @@ size_t eval_arm_operands(instruction *ip,section *sec,taddr pc,
               if (insn)
                 cpu_error(3,(long)val);  /* branch offset is out of range */
             }
-              break;
+            break;
 
           case PCL12:
             if ((!aa4ldst && val<0x1000 && val>-0x1000) ||
@@ -1180,37 +1486,10 @@ size_t eval_arm_operands(instruction *ip,section *sec,taddr pc,
 
           case PCLRT:
             op.type = NOOP;  /* is handled here */
-            if (val < 0) {
-              /* use SUB instead of ADD */
-              if (insn)
-                *insn ^= 0x00c00000;
-              val = -val;
-            }
-            if (am!=AM_L && (rotval = rotated_immediate(val))!=ROTFAIL &&
-                !(opt_adr && (sec->flags&RESOLVE_WARN))) {
-              if (insn)
-                *insn |= rotval;
-            }
-            else if (opt_adr || am==AM_L) {
-              /* ADRL or optimize ADR automatically to ADRL */
-              uint32_t hi,lo;
-
-              isize += 4;
-              if ((lo = double_rot_immediate(val,&hi)) != ROTFAIL) {
-                /* ADD/SUB Rd,PC,#hi8rotated */
-                /* ADD/SUB Rd,Rd,#lo8rotated */
-                if (insn) {
-                  *(insn+1) = *insn & ~0xf0000;
-                  *(insn+1) |= (*insn&0xf000) << 4;
-                  *insn++ |= hi;
-                  *insn |= lo;
-                }
-              }
-              else if (insn)
-                cpu_error(5,(uint32_t)val); /* Cannot make rot.immed.*/
-            }
+            if ((add = do_pclrt(sec,db,insn,val,am==AM_L)) >= 0)
+              isize += add;
             else if (insn)
-              cpu_error(5,(uint32_t)val);  /* Cannot make rot.immed.*/
+              cpu_error(5,(uint32_t)val); /* Cannot make rot.immed.*/
             break;
 
           default:
@@ -1243,22 +1522,8 @@ size_t eval_arm_operands(instruction *ip,section *sec,taddr pc,
             break;
           case PCLRT:
             op.type = NOOP;
-            if (am==AM_L && val==0) {  /* ADRL */
-              isize += 4;  /* always reserve two ADD instructions */
-              if (insn!=NULL && db!=NULL) {
-                *(insn+1) = *insn & ~0xf0000;
-                *(insn+1) |= (*insn&0xf000) << 4;
-                add_extnreloc_masked(&db->relocs,base,val,REL_PC,
-                                     arm_be_mode?24:0,8,0,0xff00);
-                add_extnreloc_masked(&db->relocs,base,val,REL_PC,
-                                     arm_be_mode?32+24:32+0,8,0,0xff);
-              }
-            }
-            else if (val == 0) {  /* ADR */
-              if (db)
-                add_extnreloc_masked(&db->relocs,base,val,REL_PC,
-                                     arm_be_mode?24:0,8,0,0xff);
-            }
+            if ((add = do_extpclrt(db,base,insn,val,am==AM_L)) >= 0)
+              isize += add;
             else if (db)
               cpu_error(22); /* operation not allowed on external symbols */
             break;
@@ -1274,6 +1539,8 @@ size_t eval_arm_operands(instruction *ip,section *sec,taddr pc,
       op.type = NOOP;  /* is handled here */
 
       if (base == NULL) {
+        uint32_t rotval;
+
         if ((rotval = rotated_immediate(val)) != ROTFAIL) {
           if (insn)
             *insn |= rotval;
@@ -1532,10 +1799,74 @@ size_t eval_arm_operands(instruction *ip,section *sec,taddr pc,
 }
 
 
+static size_t eval_ltorg(section *sec,dblock *db)
+{
+  ltpool *p;
+
+  if ((p = sec->extc.current_ltpool) == NULL)
+    ierror(0);  /* ltorg without pool? */
+
+  if (db == NULL) {
+    if (!(sec->flags & RESOLVE_WARN)) {
+      /* delete unused entries from the pool */
+      ltentry *e,*last_e,*next_e;
+
+      e = p->ltlist;
+      last_e = NULL;
+      while (e) {
+        next_e = e->next;
+        if (!(e->flags & LTE_USED)) {
+          p->size -= bytespertaddr;
+          if (last_e)
+            last_e->next = next_e;
+          else
+            p->ltlist = next_e;
+          myfree(e);
+        }
+        else
+          last_e = e;
+        e = next_e;
+      }
+    }
+  }
+  else {
+    /* write literal pool to dblock */
+    unsigned char *d = db->data = mymalloc(p->size);
+    size_t offs = 0;
+    ltentry *e;
+
+    for (e=p->ltlist; e; e=e->next) {
+      if (e->flags & LTE_USED) {
+        if (e->base) {
+          /* value is an addend on a base-symbol, which requires a relocation */
+          add_extnreloc(&db->relocs,e->base,e->value,
+                        REL_ABS,0,bytespertaddr*8,offs);
+        }
+        d = setval(arm_be_mode,d,bytespertaddr,e->value);
+      }
+      else {
+        /* unused entries may happen to avoid infinite optimization */
+        d = setval(arm_be_mode,d,bytespertaddr,0);
+        if (debug)
+          printf("Ltpool%s: unused entry offset %u\n",p->name,(unsigned)offs);
+      }
+      offs += bytespertaddr;
+    }
+    if (offs != p->size)
+      ierror(0);
+  }
+
+  return p->size;
+}
+
+
 size_t instruction_size(instruction *ip,section *sec,taddr pc)
 /* Calculate the size of the current instruction; must be identical
    to the data created by eval_instruction. */
 {
+  if (ip->code == OC_LTORG)
+    return eval_ltorg(sec,NULL);
+
   if (mnemonics[ip->code].ext.flags & THUMB)
     return eval_thumb_operands(ip,sec,pc,NULL,NULL);
 
@@ -1555,9 +1886,13 @@ dblock *eval_instruction(instruction *ip,section *sec,taddr pc)
     last_section = sec;
     last_data_type = -1;
   }
-  inst_type = (mnemonics[ip->code].ext.flags & THUMB) ? TYPE_THUMB : TYPE_ARM;
+  inst_type = last_data_type;
 
-  if (inst_type == TYPE_THUMB) {
+  if (ip->code == OC_LTORG) {
+    db->size = eval_ltorg(sec,db);
+    inst_type = TYPE_DATA;
+  }
+  else if (mnemonics[ip->code].ext.flags & THUMB) {
     uint16_t insn[2];
 
     if (db->size = eval_thumb_operands(ip,sec,pc,insn,db)) {
@@ -1566,10 +1901,10 @@ dblock *eval_instruction(instruction *ip,section *sec,taddr pc)
 
       for (i=0; i<db->size/2; i++)
         d = setval(arm_be_mode,d,2,insn[i]);
+      inst_type = TYPE_THUMB;
     }
   }
-
-  else {  /* ARM mode */
+  else {  /* ARM instruction */
     uint32_t insn[2];
 
     if (db->size = eval_arm_operands(ip,sec,pc,insn,db)) {
@@ -1578,6 +1913,7 @@ dblock *eval_instruction(instruction *ip,section *sec,taddr pc)
 
       for (i=0; i<db->size/4; i++)
         d = setval(arm_be_mode,d,4,insn[i]);
+      inst_type = TYPE_ARM;
     }
   }
 
@@ -1658,38 +1994,46 @@ int init_cpu(void)
       OC_SWP = i;
     else if (!strcmp(mnemonics[i].name,"nop"))
       OC_NOP = i;
+    else if (!strcmp(mnemonics[i].name," ltorg"))
+      OC_LTORG = i;
+    else if (!OC_MOVI && !strcmp(mnemonics[i].name,"mov"))
+      OC_MOVI = i;
+    else if (!OC_ADR && !strcmp(mnemonics[i].name,"adr"))
+      OC_ADR = i;
   }
 
   if (!strcmp(output_format,"elf"))
     elfoutput = 1;
 
   /* define register symbols */
+  if (!init_regsyms_nc(256))
+    return 0;
   for (i=0; i<16; i++) {
     sprintf(r,"r%d",i);
-    new_regsym(0,1,r,0,0,i);
+    new_regsym(0,r,0,0,i);
     sprintf(r,"c%d",i);
-    new_regsym(0,1,r,0,0,i);
+    new_regsym(0,r,0,0,i);
     sprintf(r,"p%d",i);
-    new_regsym(0,1,r,0,0,i);
+    new_regsym(0,r,0,0,i);
   }
   /* ATPCS synonyms */
   for (i=0; i<8; i++) {
     if (i < 4) {
       sprintf(r,"a%d",i+1);
-      new_regsym(0,1,r,0,0,i);
+      new_regsym(0,r,0,0,i);
     }
     sprintf(r,"v%d",i+1);
-    new_regsym(0,1,r,0,0,i+4);
+    new_regsym(0,r,0,0,i+4);
   }
   /* well known aliases */
-  new_regsym(0,1,"wr",0,0,7);
-  new_regsym(0,1,"sb",0,0,9);
-  new_regsym(0,1,"sl",0,0,10);
-  new_regsym(0,1,"fp",0,0,11);
-  new_regsym(0,1,"ip",0,0,12);
-  new_regsym(0,1,"sp",0,0,13);
-  new_regsym(0,1,"lr",0,0,14);
-  new_regsym(0,1,"pc",0,0,15);
+  new_regsym(0,"wr",0,0,7);
+  new_regsym(0,"sb",0,0,9);
+  new_regsym(0,"sl",0,0,10);
+  new_regsym(0,"fp",0,0,11);
+  new_regsym(0,"ip",0,0,12);
+  new_regsym(0,"sp",0,0,13);
+  new_regsym(0,"lr",0,0,14);
+  new_regsym(0,"pc",0,0,15);
 
   /* instruction alignment, determined by thumb-mode */
   if (inst_alignment > 1)

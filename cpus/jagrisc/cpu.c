@@ -1,6 +1,6 @@
 /*
  * cpu.c Jaguar RISC cpu description file
- * (c) in 2014-2017,2020,2021,2024,2025 by Frank Wille
+ * (c) in 2014-2017,2020,2021,2024-2026 by Frank Wille
  */
 
 #include "vasm.h"
@@ -10,7 +10,7 @@ mnemonic mnemonics[] = {
 };
 const int mnemonic_cnt = sizeof(mnemonics) / sizeof(mnemonics[0]);
 
-const char *cpu_copyright = "vasm Jaguar RISC cpu backend 0.7a (c) 2014-2017,2020,2021,2024,2025 Frank Wille";
+const char *cpu_copyright = "vasm Jaguar RISC cpu backend 0.7b (c) 2014-2017,2020,2021,2024-2026 Frank Wille";
 const char *cpuname = "jagrisc";
 int bytespertaddr = 4;
 
@@ -22,41 +22,43 @@ static uint8_t cpu_type = GPU|DSP;
 static int OC_MOVEI,OC_MOVEQ,OC_UNPACK,OC_JRABS,OC_JUMP;
 
 /* condition codes */
-static regsym cc_regsyms[] = {
-  {"t",    RTYPE_CC, 0, 0x00},
-  {"a",    RTYPE_CC, 0, 0x00},
-  {"ne",   RTYPE_CC, 0, 0x01},
-  {"eq",   RTYPE_CC, 0, 0x02},
-  {"cc",   RTYPE_CC, 0, 0x04},
-  {"hs",   RTYPE_CC, 0, 0x04},
-  {"hi",   RTYPE_CC, 0, 0x05},
-  {"cs",   RTYPE_CC, 0, 0x08},
-  {"lo",   RTYPE_CC, 0, 0x08},
-  {"pl",   RTYPE_CC, 0, 0x14},
-  {"mi",   RTYPE_CC, 0, 0x18},
-  {"f",    RTYPE_CC, 0, 0x1f},
-  {"nz",   RTYPE_CC, 0, 0x01},
-  {"z",    RTYPE_CC, 0, 0x02},
-  {"nc",   RTYPE_CC, 0, 0x04},
-  {"ncnz", RTYPE_CC, 0, 0x05},
-  {"ncz" , RTYPE_CC, 0, 0x06},
-  {"c",    RTYPE_CC, 0, 0x08},
-  {"cnz" , RTYPE_CC, 0, 0x09},
-  {"cz",   RTYPE_CC, 0, 0x0a},
-  {"nn",   RTYPE_CC, 0, 0x14},
-  {"nnnz", RTYPE_CC, 0, 0x15},
-  {"nnz",  RTYPE_CC, 0, 0x16},
-  {"n",    RTYPE_CC, 0, 0x18},
-  {"n_nz", RTYPE_CC, 0, 0x19},
-  {"n_z",  RTYPE_CC, 0, 0x1a},
-  {NULL, 0, 0, 0}
+static struct {
+  const char *name;
+  unsigned int code;
+} cc_regsyms[] = {
+  {"t",    0x00},
+  {"a",    0x00},
+  {"ne",   0x01},
+  {"eq",   0x02},
+  {"cc",   0x04},
+  {"hs",   0x04},
+  {"hi",   0x05},
+  {"cs",   0x08},
+  {"lo",   0x08},
+  {"pl",   0x14},
+  {"mi",   0x18},
+  {"f",    0x1f},
+  {"nz",   0x01},
+  {"z",    0x02},
+  {"nc",   0x04},
+  {"ncnz", 0x05},
+  {"ncz" , 0x06},
+  {"c",    0x08},
+  {"cnz" , 0x09},
+  {"cz",   0x0a},
+  {"nn",   0x14},
+  {"nnnz", 0x15},
+  {"nnz",  0x16},
+  {"n",    0x18},
+  {"n_nz", 0x19},
+  {"n_z",  0x1a},
 };
 
 
 int init_cpu(void)
 {
+  int regsym_cnt = sizeof(cc_regsyms) / sizeof(cc_regsyms[0]);
   int i;
-  regsym *r;
 
   for (i=0; i<mnemonic_cnt; i++) {
     if (!strcmp(mnemonics[i].name,"movei"))
@@ -72,8 +74,10 @@ int init_cpu(void)
   }
 
   /* define all condition code register symbols */
-  for (r=cc_regsyms; r->reg_name!=NULL; r++)
-    add_regsym(r,1);
+  if (!init_regsyms_nc(128))
+    return 0;
+  for (i=0; i<regsym_cnt; i++)
+    new_regsym(0,cc_regsyms[i].name,RTYPE_CC,0,cc_regsyms[i].code);
 
   return 1;
 }
@@ -120,7 +124,7 @@ static int parse_reg(char **p)
   char *s;
 
   if (s = skip_identifier(rp)) {
-    regsym *sym = find_regsym_nc(rp,s-rp);
+    regsym *sym = find_regsym(rp,s-rp);
 
     if (sym!=NULL && sym->reg_type==RTYPE_R) {
       reg = sym->reg_num;
@@ -145,7 +149,7 @@ static expr *parse_cc(char **p)
   *p = skip(*p);
 
   if (end = skip_identifier(*p)) {
-    regsym *sym = find_regsym_nc(*p,end-*p);
+    regsym *sym = find_regsym(*p,end-*p);
 
     if (sym!=NULL && sym->reg_type==RTYPE_CC) {
       *p = end;
@@ -223,7 +227,7 @@ char *parse_cpu_special(char *start)
 
   if (s = skip_identifier(name)) {
     /* Atari MadMac compatibility directives */
-    if (dotdirs && *name=='.')  /* ignore leading dot */
+    if (*name=='.')  /* ignore leading dot */
       name++;
 
     if (s-name==3 && !strnicmp(name,"dsp",3)) {
@@ -243,7 +247,7 @@ char *parse_cpu_special(char *start)
       /* undefine a register symbol */
       s = skip(s);
       if (buf = parse_identifier(0,&s)) {
-        undef_regsym(buf->str,1,RTYPE_R);
+        undef_regsym(buf->str,RTYPE_R);
         eol(s);
         return skip_line(s);
       }
@@ -253,7 +257,7 @@ char *parse_cpu_special(char *start)
       /* undefine a condition code symbol */
       s = skip(s);
       if (buf = parse_identifier(0,&s)) {
-        undef_regsym(buf->str,1,RTYPE_CC);
+        undef_regsym(buf->str,RTYPE_CC);
         eol(s);
         return skip_line(s);
       }
@@ -271,7 +275,7 @@ int parse_cpu_label(char *labname,char **start)
   char *dir=*start;
   char *s;
 
-  if (dotdirs && *dir=='.')  /* ignore leading dot */
+  if (*dir=='.')  /* ignore leading dot */
     dir++;
 
   if (s = skip_identifier(dir)) {
@@ -282,7 +286,7 @@ int parse_cpu_label(char *labname,char **start)
       int r;
 
       if ((r = parse_reg(&s)) >= 0)
-        new_regsym(0,1,labname,RTYPE_R,0,r);
+        new_regsym(0,labname,RTYPE_R,0,r);
       else
         cpu_error(2);  /* register expected */
       eol(s);
@@ -297,7 +301,7 @@ int parse_cpu_label(char *labname,char **start)
 
       if ((ccexp = parse_cc(&s)) != NULL) {
         if (eval_expr(ccexp,&val,NULL,0))
-          new_regsym(0,1,labname,RTYPE_CC,0,(int)val);
+          new_regsym(0,labname,RTYPE_CC,0,(int)val);
         else
           general_error(30);  /* expression must be a constant */
       }

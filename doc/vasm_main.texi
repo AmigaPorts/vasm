@@ -14,7 +14,7 @@ or additional options.
       @command{vasm<target>_<syntax> [options] [sourcefile]}
 @end example
 
-    When the source file name is missing the assembler reads the source
+    When the source file name is missing, the assembler reads the source
     text from @file{stdin} until encountering @code{EOF} (end-of-file,
     which is @code{CTRL-D} in Unix shells, or @code{CTRL-\} in AmigaOS
     shells). Note, that most debugging formats (DWARF, etc.) no longer
@@ -236,16 +236,16 @@ Other options:
         (@code{.space} in std-syntax, @code{ds} in mot-syntax, etc.)
         are filled with the given value. Defaults to zero.
 
+@item -v
+        Print version and copyright messages from the assembler and all
+        its modules, then exit.
+
 @item -w
         Hide all warning messages.
 
 @item -wfail
         The return code of vasm will no longer be 0 (success), when there
         was a warning. Errors always make the return code non-zero (failure).
-
-@item -v
-        Print version and copyright messages from the assembler and all
-        its modules, then exit.
 @end table
 
 Note, that while most options allow an argument without any separating blank,
@@ -270,41 +270,24 @@ floating point output depends on the combination of host- and
 backend-format! If you need absolute precision, encode the floating
 point constants yourself in binary.
 
-The available operators include all those which are common in assembler as
-well as in C expressions.
+The available operator tokens may be extended or modified by the current
+syntax module in use, but the default is to use the same operators as in
+the C programming language.
 
-C like operators:
-@itemize
-@item Unary: @code{+ - ! ~}
-@item Arithmetic: @code{+ - * / % << >>}
-@item Bitwise: @code{& | ^}
-@item Logical: @code{&& ||}
-@item Comparative: @code{< > <= >= == !=}
-@end itemize
-
-Assembler like operators:
-@itemize
-@item Unary: @code{+ - ~}
-@item Arithmetic: @code{+ - * / // << >>}
-@item Bitwise: @code{& ! ~}
-@item Comparative: @code{< > <= >= = <>}
-@end itemize
-
-Up to version 1.4b the operators had the same precedence and associativity as
-in the C language. Newer versions have changed the operator priorities to
-comply with common assembler behaviour. The expression evaluation
+Note, though, that the operator priority and associativitiy may be different 
+from C, to comply with common assembler behaviour. The expression evaluation
 priorities, from highest to lowest, are:
 
 @enumerate 1
-@item @code{+ - ! ~} (unary +/- sign, not, complement)
+@item @code{+ - ! ~} (unary +/- sign, not, bitwise complement)
 @item @code{<< >>} (shift left, shift right)
 @item @code{&} (bitwise and)
-@item @code{^ ~} (two forms of bitwise exclusive-or)
-@item @code{| !} (two forms bitwise inclusive-or)
-@item @code{* / % //} (multiply, divide, modulo, modulo)
-@item @code{+ -} (plus, minus)
+@item @code{^} (bitwise exclusive-or)
+@item @code{|} (bitwise inclusive-or)
+@item @code{* / %} (multiply, divide, modulo)
+@item @code{+ -} (add, subtract)
 @item @code{< > <= >=} (less, greater, less or equal, greater or equal)
-@item @code{== = != <>} (two forms of equality and inequality)
+@item @code{== !=} (equality and inequality)
 @item @code{&&} (logical and)
 @item @code{||} (logical or)
 @end enumerate
@@ -330,6 +313,9 @@ C language:
 @item \b
         The bell character.
 
+@item \e
+        Escape character (27).
+
 @item \f
         Form feed.
 
@@ -347,9 +333,6 @@ C language:
     
 @item \'
         Produces a single @code{'}.
-
-@item \e
-        Escape character (27).
 
 @item \<octal-digits>
         One character with the code specified by the digits
@@ -481,6 +464,7 @@ Has to be provided completely by the syntax module.
 @itemize
     @item Jordan Zebor
     @item Joseph Zatarski
+    @item Brian Woodruff
     @item Frank Wille
     @item Jim Westfall
     @item Bernard Thibault

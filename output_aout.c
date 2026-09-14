@@ -1,10 +1,10 @@
 /* aout.c a.out output driver for vasm */
-/* (c) in 2008-2016,2020-2025 by Frank Wille */
+/* (c) in 2008-2016,2020-2026 by Frank Wille */
 
 #include "vasm.h"
 #include "output_aout.h"
 #if defined(OUTAOUT) && defined(MID)
-static char *copyright="vasm a.out output module 0.11 (c) 2008-2016,2020-2025 Frank Wille";
+static char *copyright="vasm a.out output module 0.12 (c) 2008-2016,2020-2026 Frank Wille";
 
 static section *sections[3];
 static utaddr secsize[3];
@@ -147,11 +147,12 @@ static void aout_initwrite(section *firstsec)
 #endif
   }
 
-  initlist(&aoutstrlist.l);
-  aoutstrlist.hashtab = mycalloc(ASTRTABSIZE*sizeof(struct StrTabNode *));
+  /* init lists */
+  aoutstrlist.first = aoutstrlist.last = NULL;
+  aoutstrlist.hashtab = new_hashtable_c(ASTRTABSIZE);
   aoutstrlist.nextoffset = 4;  /* first string is always at offset 4 */
-  initlist(&aoutsymlist.l);
-  aoutsymlist.hashtab = mycalloc(ASYMTABSIZE*sizeof(struct SymbolNode *));
+  aoutsymlist.first = aoutsymlist.last = NULL;
+  aoutsymlist.hashtab = new_hashtable_c(ASYMTABSIZE);
   aoutsymlist.nextindex = 0;
   initlist(&treloclist);
   initlist(&dreloclist);
@@ -197,29 +198,29 @@ static void aout_initwrite(section *firstsec)
 static uint32_t aout_addstr(const char *s)
 /* add a new symbol name to the string table and return its offset */
 {
-  struct StrTabNode **chain;
   struct StrTabNode *sn;
+  hashdata data;
 
   if (s == NULL)
     return 0;
   if (*s == '\0')
     return 0;
+  if (find_name(aoutstrlist.hashtab,s,&data))
+    return ((struct StrTabNode *)data.ptr)->offset;
 
-  /* search string in hash table */
-  chain = &aoutstrlist.hashtab[hashcode(s)%ASTRTABSIZE];
-  while (sn = *chain) {
-    if (!strcmp(s,sn->str))
-      return (sn->offset);  /* it's already in, return offset */
-    chain = &sn->hashchain;
-  }
-
-  /* new string table entry */
-  *chain = sn = mymalloc(sizeof(struct StrTabNode));
-  sn->hashchain = NULL;
+  /* append new string table entry to list */
+  sn = mymalloc(sizeof(struct StrTabNode));
+  sn->next = NULL;
   sn->str = s;
   sn->offset = aoutstrlist.nextoffset;
-  addtail(&aoutstrlist.l,&sn->n);
   aoutstrlist.nextoffset += strlen(s) + 1;
+  if (aoutstrlist.last)
+    aoutstrlist.last->next = sn;
+  else
+    aoutstrlist.first = sn;
+  aoutstrlist.last = sn;
+  data.ptr = sn;
+  add_hashentry(aoutstrlist.hashtab,s,data);
   return sn->offset;
 }
 
@@ -237,40 +238,37 @@ static struct SymbolNode *aout_addsym(const char *name,uint8_t type,int8_t other
   sym->s.n_other = other;
   setval(be,&sym->s.n_desc,2,desc);
   setval(be,&sym->s.n_value,4,value);
-  addtail(&aoutsymlist.l,&sym->n);
+  if (aoutsymlist.last)
+    aoutsymlist.last->next = sym;
+  else
+    aoutsymlist.first = sym;
+  aoutsymlist.last = sym;
   return sym;
 }
 
 
 static uint32_t aout_addsymhash(const char *name,taddr value,int bind,
                                 int info,int type,int desc,int be)
-/* add a new symbol, return its symbol table index */
+/* add a new symbol, also to the hashtable, return its symbol table index */
 {
-  struct SymbolNode **chain,*sym;
+  struct SymbolNode *sym = aout_addsym(name,type,((bind&0xf)<<4)|(info&0xf),
+                                       desc,value,be);
+  hashdata data;
 
-  chain = &aoutsymlist.hashtab[hashcode(name?name:emptystr)%ASYMTABSIZE];
-  while (sym = *chain)
-    chain = &sym->hashchain;
-
-  /* new symbol table entry */
-  *chain = sym = aout_addsym(name,type,((bind&0xf)<<4)|(info&0xf),
-                             desc,value,be);
+  data.ptr = sym;
+  add_hashentry(aoutsymlist.hashtab,sym->name,data);
   return sym->index;
 }
 
 
-static int aout_findsym(const char *name,int be)
+static int aout_findsym(const char *name)
 /* find a symbol by its name, return symbol table index or -1 */
 {
-  struct SymbolNode **chain = &aoutsymlist.hashtab[hashcode(name)%ASYMTABSIZE];
-  struct SymbolNode *sym;
+  hashdata data;
 
-  while (sym = *chain) {
-    if (!strcmp(name,sym->name) && !(sym->s.n_type & N_STAB))
-      return ((int)sym->index);
-    chain = &sym->hashchain;
-  }
-  return (-1);
+  if (find_name(aoutsymlist.hashtab,name,&data))
+    return ((struct SymbolNode *)data.ptr)->index;
+  return -1;
 }
 
 
@@ -446,7 +444,7 @@ static uint32_t aout_convert_rlist(int be,atom *a,int secid,
         /* this is an external symbol reference */
         int symidx;
 
-        if ((symidx = aout_findsym(refsym->name,be)) == -1)
+        if ((symidx = aout_findsym(refsym->name)) == -1)
           symidx = aout_addsymhash(refsym->name,0,0,0,N_UNDF|N_EXT,0,be);
         aout_addreloclist(rlst,pc+r->byteoffset,symidx,
                           getrinfo(a,&rl,1,sections[secid]->name,be),
@@ -485,12 +483,12 @@ static uint32_t aout_addrelocs(int be,int secid,struct list *rlst,
 
   if (sections[secid]) {
     atom *a;
-    taddr pc=0,npc;
+    taddr pc;
 
-    for (a=sections[secid]->first; a; a=a->next) {
-      npc = pcalign(a,pc);
-      rtabsize += aout_convert_rlist(be,a,secid,rlst,npc,getrinfo);
-      pc = npc + atom_size(a,sections[secid],npc);
+    for (a=sections[secid]->first,pc=0; a; a=a->next) {
+      pc = pcalign(a,pc);
+      rtabsize += aout_convert_rlist(be,a,secid,rlst,pc,getrinfo);
+      pc += atom_size(a,sections[secid],pc);
     }
   }
   return rtabsize;
@@ -521,15 +519,15 @@ static void aout_writesection(FILE *f,section *sec,taddr sec_align)
 {
   if (sec) {
     atom *a;
-    taddr pc=0,npc;
+    taddr pc;
 
-    for (a=sec->first; a; a=a->next) {
-      npc = fwpcalign(f,a,sec,pc);
+    for (a=sec->first,pc=0; a; a=a->next) {
+      pc = fwpcalign(f,a,sec,pc);
       if (a->type == DATA)
         fwdata(f,a->content.db->data,a->content.db->size);
       else if (a->type == SPACE)
         fwsblock(f,a->content.sb);
-      pc = npc + atom_size(a,sec,npc);
+      pc += atom_size(a,sec,pc);
     }
     fwalign(f,pc,sec_align);
   }
@@ -540,19 +538,18 @@ static void aout_writeorg(FILE *f,section *sec,taddr sec_align)
 /* write all absolute ORG-sections appended to .text */
 {
   taddr pc = get_sec_size(sections[S_TEXT]);
-  taddr npc;
   atom *a;
 
   for (; sec; sec=sec->next) {
     if (sec->flags & ABSOLUTE) {
       fwalign(f,pc,sec->align);
       for (a=sec->first; a; a=a->next) {
-        npc = fwpcalign(f,a,sec,pc);
+        pc = fwpcalign(f,a,sec,pc);
         if (a->type == DATA)
           fwdata(f,a->content.db->data,a->content.db->size);
         else if (a->type == SPACE)
           fwsblock(f,a->content.sb);
-        pc = npc + atom_size(a,sec,npc);
+        pc += atom_size(a,sec,pc);
       }
     }
   }
@@ -573,7 +570,7 @@ void aout_writesymbols(FILE *f)
 {
   struct SymbolNode *sym;
 
-  while (sym = (struct SymbolNode *)remhead(&aoutsymlist.l))
+  for (sym=aoutsymlist.first; sym; sym=sym->next)
     fwdata(f,&sym->s,sizeof(struct nlist32));
 }
 
@@ -584,7 +581,7 @@ void aout_writestrings(FILE *f,int be)
     struct StrTabNode *stn;
 
     fw32(f,aoutstrlist.nextoffset,be);
-    while (stn = (struct StrTabNode *)remhead(&aoutstrlist.l))
+    for (stn=aoutstrlist.first; stn; stn=stn->next)
       fwdata(f,stn->str,strlen(stn->str)+1);
   }
 }
