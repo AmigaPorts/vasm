@@ -1583,7 +1583,7 @@
   "loadi",    {BJ,VX},      {{SEA,AXD},        {0xff00,0x1001},2|Q|S_NONE,apollo},
   "loadi",    {IQ,D_},      {{SEA,A2M},        {0xfe00,0x1001},2|QW|S_AMMX,apollo},
   "loadi",    {IQ,VX},      {{SEA,AXD},        {0xfe00,0x1001},2|QW|S_AMMX,apollo},
-  "lpstop",   {IM},         {{NEA},            {0xf800,0x01c0},2|W|S_NONE,m68060|cpu32},
+  "lpstop",   {IM},         {{NEA},            {0xf800,0x01c0},2|W|S_NONE,m68060|cpu32|apollo},
   "lsl",      {AM},         {{SEA},            {0xe3c0,0},1|W|S_NONE,m68000up},
   "lsl",      {MI},         {{SEA},            {0xe3c0,0},1|W|S_NONE,apollo},
   "lsl",      {D_,D_},      {{RHI,RLO},        {0xe128,0},1|CFBWL|S_STD,m68000up|mcf},

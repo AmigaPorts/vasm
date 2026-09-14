@@ -3,14 +3,15 @@ selected with the @option{-Fvobj} option.
 
 @section Legal
 
-    This module is written in 2002-2023 by Volker Barthelmann and
-    is covered by the vasm copyright without modifications.
+    This module is written in 2002-2025 by Volker Barthelmann
+    and is covered by the vasm copyright without modifications.
 
 @section Additional options for this module
 @table @option
     @item -vobj2
         Use vobj format version 2 which generally reduces file size.
-
+    @item -vobj3
+        Version 3 supports absolute section addresses and indirect symbols.
 @end table
 
 
@@ -49,6 +50,7 @@ nsections
   .string name
   .string attr
   .number flags
+  .number address (entry is present with version 3+ and flags&ABSOLUTE only)
   .number align
   .number size
   .number nrelocs
@@ -96,4 +98,5 @@ None.
 This module has the following error messages:
 @itemize @minus
 @item 3010: section <%s>: alignment padding (%lu) not a multiple of %lu at 0x%llx
+@item 3026: output module requires option -vobj3 to support indirect symbols
 @end itemize

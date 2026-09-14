@@ -89,7 +89,7 @@ static struct Symbol32Node *addSymbol32(const char *name)
   }
   data.ptr = sn;
   sn->idx = symindex++;
-  add_hashentry(elfsymhash,name?name:emptystr,data);
+  add_hashentry(elfsymhash,name?name:emptystr,data,0);
   return sn;
 }
 
@@ -106,7 +106,7 @@ static struct Symbol64Node *addSymbol64(const char *name)
   }
   data.ptr = sn;
   sn->idx = symindex++;
-  add_hashentry(elfsymhash,name?name:emptystr,data);
+  add_hashentry(elfsymhash,name?name:emptystr,data,0);
   return sn;
 }
 

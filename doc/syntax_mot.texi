@@ -83,11 +83,11 @@ This syntax module provides the following additional options:
 @section General Syntax
 
 Labels must either start at the first column of a line or have to be
-terminated by a colon (@code{:}). In the first case the mnemonic
-has to be separated from the label by whitespace (not required in any case,
-e.g. with the @code{=} directive). A double colon (@code{::})
-automatically makes the label externally visible (refer to directive
-@code{xdef}).
+terminated by a colon (@code{:}). In the first case the mnemonic or
+assembler directive has to be separated from the label by whitespace
+(not required in any case, e.g. with the @code{=} directive).
+A double colon (@code{::}) automatically makes the label externally visible
+(refer to directive @code{xdef}).
 
 Local labels are either prefixed by '@code{.}' or suffixed by '@code{$}'.
 For the rest, any alphanumeric character including '@code{_}' is allowed.
@@ -112,8 +112,11 @@ separated by a dot (if the CPU-module supports qualifiers). The
 operands are separated from the mnemonic by whitespace. Multiple
 operands are separated by comma (@code{,}).
 
-In this syntax module, the operand field must not contain any whitespace
-characters, as long as the option @option{-spaces} was not specified.
+In any case, mnemonics and directives must not start on the first column!
+
+The operand field, which is separated by whitespace from the
+mnemonic/directive field, must not contain any whitespace characters itself,
+as long as the option @option{-spaces} was not specified.
 
 Comments can be introduced everywhere by the characters @code{;} or @code{*}.
 The rest of the line will be ignored. Also everything following the operand

@@ -10,7 +10,7 @@
 #include "stabs.h"
 #include "dwarf.h"
 
-#define _VER "vasm 2.0c"
+#define _VER "vasm 2.0d"
 const char *copyright = _VER " (c) in 2002-2025 Volker Barthelmann";
 #ifdef AMIGA
 #ifndef __AMIGADATE__
@@ -31,7 +31,8 @@ static const char *_ver = "$VER: " _VER " " __AMIGADATE__ "\r\n";
 /* global options */
 char *output_format="test";
 char *inname,*outname;
-int chklabels,nocase,no_symbols,pic_check,unnamed_sections;
+int chklabels=1;
+int nocase,no_symbols,pic_check,unnamed_sections;
 unsigned space_init;
 taddr inst_alignment;
 
@@ -52,6 +53,7 @@ int debug,final_pass,exec_out,nostdout;
 char *defsectname,*defsecttype;
 taddr defsectorg;
 
+int output_indirect;
 int octetsperbyte;
 int output_bitsperbyte,output_bytes_le,input_bytes_le;
 unsigned long long taddrmask;
@@ -565,11 +567,24 @@ static void undef_syms(void)
 
 static void fix_labels(void)
 {
-  symbol *sym,*base;
+  symbol *sym,*base,*next;
   taddr val;
 
-  for(sym=first_symbol;sym;sym=sym->next){
+  if((sym=first_symbol)==NULL) return;  /* no symbols to fix */
+
+  do{
     /* turn all absolute mode labels into absolute symbols */
+    next=sym->next;
+
+    if(add_uscore&&(sym->type==IMPORT||sym->flags&(EXPORT|COMMON|WEAK))){
+      /* imported/exported symbol names receive a leading underscore */
+      size_t len=strlen(sym->name)+1;
+      char *p=myrealloc(sym->name,len+1);
+      memmove(p+1,p,len);
+      p[0]='_';
+      sym->name=p;
+    }
+
     if((sym->flags&ABSLABEL)&&sym->type==LABSYM){
       sym->type=EXPRESSION;
       sym->flags&=~(TYPE_MASK|COMMON);
@@ -582,27 +597,29 @@ static void fix_labels(void)
     else if(sym->type==EXPRESSION){
       if(type_of_expr(sym->expr)==NUM&&!eval_expr(sym->expr,&val,NULL,0)){
         if(find_base(sym->expr,&base,NULL,0)==BASE_OK){
-          /* turn into an offsetted label symbol from the base's section */
-          sym->type=base->type;
-          sym->sec=base->sec;
-          sym->pc=val;
-          sym->align=1;
-          if(sym->type==IMPORT&&(sym->flags&EXPORT))
-            general_error(81,sym->name);  /* imported expr. in equate */
+          if(output_indirect&&(sym->flags&EXPORT)&&base->type==IMPORT){
+            /* reference on imported base-symbol could be an indirection */
+            sym->flags|=SYMINDIR;
+            base->flags|=REFERENCED;  /* do not report indirections as unref'd */
+          }
+          else if(base->type==IMPORT){
+            if(!(sym->flags&EXPORT))
+              rem_symbol(sym);  /* local indirection - reference is replaced */
+            else
+              general_error(81,sym->name);  /* imported expr. in equate */
+          }
+          else {
+            /* turn into an offsetted label symbol from the base's section */
+            sym->type=base->type;
+            sym->sec=base->sec;
+            sym->pc=val;
+            sym->align=1;
+          }
         }else
           general_error(53,sym->name);  /* non-relocatable expr. in equate */
       }
     }
-    if (add_uscore && (sym->type==IMPORT || sym->flags&(EXPORT|COMMON|WEAK))) {
-      /* imported/exported symbol names receive a leading underscore */
-      size_t len = strlen(sym->name) + 1;
-      char *p = myrealloc(sym->name,len+1);
- 
-      memmove(p+1,p,len);
-      p[0] = '_';
-      sym->name = p;
-    }
-  }
+  }while(sym=next);
 }
 
 static void trim_uninitialized(section *sec)
@@ -654,6 +671,7 @@ static struct {
   "aout",0,init_output_aout,
   "bin",0,init_output_bin,
   "cdef",0,init_output_cdef,
+  "coff",0,init_output_coff,
   "dri",0,init_output_tos,
   "elf",0,init_output_elf,
   "gst",0,init_output_gst,
@@ -696,7 +714,7 @@ static int init_main(void)
   while(i<mnemonic_cnt){
     data.idx=i;
     mname=mnemonics[i++].name;
-    add_hashentry(mnemohash,mname,data);
+    add_hashentry(mnemohash,mname,data,1);  /* always case-insensitive */
     while(i<mnemonic_cnt&&!strcmp(mname,mnemonics[i].name))
       mnemonics[i++].name=mname;  /* make sure the pointer is the same */
   }
@@ -1391,7 +1409,7 @@ int main(int argc,char **argv)
       continue;
     }
     if(!strcmp("-chklabels",argv[i])){
-      chklabels=1;
+      chklabels=1;  /* is always enabled, since V2.0d */
       continue;
     }
     if(!strcmp("-underscore",argv[i])){
@@ -1465,9 +1483,10 @@ int main(int argc,char **argv)
   if(errors==0||produce_listing)
     assemble();
   cur_src=NULL;
-  if(errors==0)
+  if(errors==0){
+    fix_labels();
     undef_syms();
-  fix_labels();
+  }
   if(produce_listing){
     if(!listname)
       listname="a.lst";

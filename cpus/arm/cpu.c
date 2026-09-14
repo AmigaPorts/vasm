@@ -10,7 +10,7 @@ mnemonic mnemonics[] = {
 };
 const int mnemonic_cnt = sizeof(mnemonics)/sizeof(mnemonics[0]);
 
-const char *cpu_copyright = "vasm ARM cpu backend 0.5a (c) 2004,2006,2010,2011,2014-2020,2024 Frank Wille";
+const char *cpu_copyright = "vasm ARM cpu backend 0.5b (c) 2004,2006,2010,2011,2014-2020,2024 Frank Wille";
 const char *cpuname = "ARM";
 int bytespertaddr = 4;
 
@@ -376,6 +376,8 @@ int parse_operand(char *p,int len,operand *op,int optype)
           return PO_NOMATCH;
         p = skip(p);
       }
+      else if (*p == '[')
+        return PO_NOMATCH;
 
       if (UPDOWNOPER(optype)) {
         if (*p == '-') {
@@ -396,18 +398,15 @@ int parse_operand(char *p,int len,operand *op,int optype)
         else
           return PO_NOMATCH;
       }
-      else {  /* an expression */
-        if (ISIDSTART(*p) || isdigit((unsigned char)*p) ||
-            (!UPDOWNOPER(optype) && (*p=='-' || *p=='+')))
-          op->value = parse_expr(&p);
-        else
-          return PO_NOMATCH;
-      }
+      else  /* an expression */
+        op->value = parse_expr(&p);
 
       if (optype==R19PO || optype==R3UD1 || optype==IMUD1 || optype==IMCP1) {
         p = skip(p);
-        if (*p++ != ']')
+        if (*p++ != ']') {
+          free_expr(op->value);
           return PO_NOMATCH;
+        }
       }
       if (optype==R19WB || optype==R3UD1 || optype==IMUD1 || optype==IMCP1) {
         if (*p == '!') {

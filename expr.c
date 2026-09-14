@@ -252,7 +252,6 @@ static expr *primary_expr(void)
   if(*s=='\''||*s=='\"'){
     taddr val=0;
     int shift=0,cnt=0;
-    int charspertaddr=bytespertaddr*BITSPERBYTE/8;
     char quote=*s++;
     for(;;){
       char c;
@@ -1042,7 +1041,7 @@ int eval_expr(expr *tree,taddr *result,section *sec,taddr pc)
 {
   taddr val,lval,rval;
   symbol *lsym,*rsym;
-  int cnst=1,lbok,rbok;
+  int cnst=1,lbok;
 
   if(!tree)
     ierror(0);
@@ -1056,9 +1055,8 @@ int eval_expr(expr *tree,taddr *result,section *sec,taddr pc)
     val=(lval+rval);
     break;
   case SUB:
-    lbok=find_base(tree->left,&lsym,sec,pc)==BASE_OK;
-    rbok=find_base(tree->right,&rsym,sec,pc)==BASE_OK;
-    if(cnst==0&&rbok&&LOCREF(rsym)){
+    if(cnst==0&&find_base(tree->right,&rsym,sec,pc)==BASE_OK&&LOCREF(rsym)){
+      lbok=find_base(tree->left,&lsym,sec,pc)==BASE_OK;
       if(lbok&&LOCREF(lsym)&&lsym->sec==rsym->sec){
         /* l2-l1 is constant when both have a valid symbol-base, and both
            symbols are LABSYMs from the same section, e.g. (sym1+x)-(sym2-y) */

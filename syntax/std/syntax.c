@@ -1539,7 +1539,7 @@ int init_syntax(void)
   dirhash=new_hashtable(0x1000);
   for(i=0;i<dir_cnt;i++){
     data.idx=i;
-    add_hashentry(dirhash,directives[i].name,data);
+    add_hashentry(dirhash,directives[i].name,data,1);  /* case insensitive */
     if(!strcmp(directives[i].name,"else"))
       dir_else=i;
     if(!strcmp(directives[i].name,"elseif"))

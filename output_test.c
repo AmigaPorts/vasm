@@ -32,6 +32,7 @@ int init_output_test(char **cp,void (**wo)(FILE *,section *,symbol *),int (**oa)
   secname_attr=1;  /* attribute is used to differentiate between sections */
   asciiout=1;
   output_bitsperbyte=1;
+  output_indirect=1;
   return 1;
 }
 

@@ -24,3 +24,5 @@
   "unaligned relocation offset at %s+%#lx",WARNING,
   "section <%s>: maximum size of %#llx bytes exceeded (%#llx)",FATAL|ERROR|NOLINE,
   "section <%s>: memory flags %#lx have been ignored",WARNING|NOLINE,
+  "output module requires option %s to support %s",ERROR|NOLINE,    /* 25 */
+  "symbol indirection from <%s> to <%s> has non-zero addend",ERROR|NOLINE,

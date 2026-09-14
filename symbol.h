@@ -1,5 +1,5 @@
 /* symbol.h - manage all kinds of symbols */
-/* (c) in 2014-2023 by Volker Barthelmann and Frank Wille */
+/* (c) in 2014-2025 by Volker Barthelmann and Frank Wille */
 
 #ifndef SYMBOL_H
 #define SYMBOL_H
@@ -34,6 +34,7 @@
 #define NEAR (1<<15)        /* may refer symbol with near addressing modes */
 #define XDEF (1<<16)        /* must not remain at IMPORT-type */
 #define XREF (1<<17)        /* must stay IMPORT-type */
+#define SYMINDIR (1<<18)    /* expression with symbol indirection */
 #define RSRVD_C (1L<<20)    /* bits 20..23 are reserved for cpu modules */
 #define RSRVD_S (1L<<24)    /* bits 24..27 are reserved for syntax modules */
 #define RSRVD_O (1L<<28)    /* bits 28..31 are reserved for output modules */
@@ -72,6 +73,7 @@ extern symbol *first_symbol;
 void print_symbol(FILE *,symbol *);
 const char *get_bind_name(symbol *);
 void add_symbol(symbol *);
+void rem_symbol(symbol *);
 symbol *find_symbol(const char *);
 void refer_symbol(symbol *,const char *);
 void save_symbols(void);
@@ -91,7 +93,7 @@ symbol *internal_abs(const char *);
 expr *set_internal_abs(const char *,taddr);
 
 #ifdef HAVE_REGSYMS
-void add_regsym(regsym *);
+void add_regsym(regsym *,int);
 regsym *find_regsym(const char *,int);
 regsym *find_regsym_nc(const char *,int);
 regsym *new_regsym(int,int,const char *,int,unsigned int,unsigned int);

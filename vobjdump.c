@@ -32,6 +32,7 @@ nsections
   .string name
   .string attr
   .number flags
+  .number address [vobj version 3+ and flags&ABSOLUTE only]
   .number align
   .number size (in target-bytes)
   .number nrelocs
@@ -82,6 +83,7 @@ static const char *type_name[] = {
   "","obj","func","sect","file",NULL
 };
 
+static int ver;       /* VOBJ version */
 static ubyte *vobj;   /* base address of VOBJ buffer */
 static size_t vlen;   /* length of VOBJ file in buffer */
 static ubyte *p;      /* current object pointer */
@@ -94,23 +96,27 @@ static const char *cpu_name;
 #define BPTMASK(x) (unsigned long long)((x)&bptmask)
 
 
+static void obj_corrupt(void)
+{
+  fprintf(stderr,"\nObject file is corrupt! Aborting.\n");
+  exit(1);
+}
+
+
 static taddr read_number(int is_signed)
 {
   taddr val;
   ubyte n;
   int i;
 
-  if (p<vobj || p>=vobj+vlen) {
-    corrupt:
-    fprintf(stderr,"\nObject file is corrupt! Aborting.\n");
-    exit(1);
-  }
+  if (p<vobj || p>=vobj+vlen)
+    obj_corrupt();
 
   if ((n = *p++) <= 0x7f)
     return (taddr)n;
 
   if (p + (n&0x3f) > vobj + vlen)
-    goto corrupt;
+    obj_corrupt();
 
   if (n >= 0xc0) {  /* version 2 negative numbers */
     n -= 0xc0;
@@ -130,14 +136,11 @@ static taddr read_number(int is_signed)
 static void skip_string(void)
 {
   if (p < vobj)
-    goto corrupt;
+    obj_corrupt();
   while (*p) {
     p++;
-    if (p >= vobj+vlen) {
-      corrupt:
-      fprintf(stderr,"\nObject file is corrupt! Aborting.\n");
-      exit(1);
-    }
+    if (p >= vobj+vlen)
+      obj_corrupt();
   }
   p++;
 }
@@ -252,17 +255,23 @@ static void read_section(struct vobj_section *vsect,
   attr = (char *)p;
   skip_string();
   flags = (unsigned long)read_number(0);
+
+  print_sep();
+  printf("%08llx: SECTION \"%s\" (attributes=\"%s\")",
+         BPTMASK(vsect->offs),vsect->name,attr);
+  if (ver>=3 && (flags&ABSOLUTE))
+    printf(" @%llx\n",BPTMASK(read_number(0)));
+  else
+    putchar('\n');
+
   align = (int)read_number(0);
   vsect->dsize = read_number(0);
   nrelocs = (int)read_number(0);
   vsect->fsize = read_number(0);
 
-  print_sep();
-  printf("%08llx: SECTION \"%s\" (attributes=\"%s\")\n"
-         "Flags: %-8lx  Alignment: %-6d "
+  printf("Flags: %-8lx  Alignment: %-6d "
          "Total size: %-9" PRId64 " File size: %-9" PRId64 "\n",
-         BPTMASK(vsect->offs),vsect->name,attr,flags,align,
-         vsect->dsize,vsect->fsize);
+         flags,align,vsect->dsize,vsect->fsize);
   if (nrelocs)
     printf("%d Relocation%s present.\n",nrelocs,nrelocs==1?emptystr:sstr);
 
@@ -342,6 +351,8 @@ static const char *def_name(struct vobj_symbol *vs,
 {
   switch (vs->type) {
     case EXPRESSION:
+      if (vs->flags&SYMINDIR)
+        return "*IND*";
       return "*ABS*";
     case IMPORT:
       return "*UND*";
@@ -358,7 +369,7 @@ static int vobjdump(void)
   p = vobj;
 
   if (vlen>4 && p[0]==0x56 && p[1]==0x4f && p[2]==0x42 && p[3]==0x4a) {
-    int endian,ver,nsecs,nsyms,i;
+    int endian,nsecs,nsyms,i;
     struct vobj_symbol *vsymbols = NULL;
     struct vobj_section *vsect = NULL;
 
@@ -440,10 +451,17 @@ static int vobjdump(void)
       }
       if (!strncmp(vs->name," *current pc",12))
         continue;
-      printf("%08llx: %-4s %08x %-4s %8.8s %8llx %s\n",
-             BPTMASK(vs->offs),bind_name(vs->flags),(unsigned)vs->size,
-             type_name[TYPE(vs)],def_name(vs,vsect,nsecs),
-             BPTMASK(vs->val),vs->name);
+
+      printf("%08llx: %-4s ",BPTMASK(vs->offs),bind_name(vs->flags));
+      if (vs->flags & SYMINDIR)
+        printf("%08x %-4s %8.8s %8llx %s -> %s\n",
+               (unsigned)vsymbols[vs->size-1].offs,type_name[TYPE(vs)],
+               def_name(vs,vsect,nsecs),BPTMASK(vs->val),
+               vs->name,vsymbols[vs->size-1].name);
+      else
+        printf("%08x %-4s %8.8s %8llx %s\n",
+               (unsigned)vs->size,type_name[TYPE(vs)],def_name(vs,vsect,nsecs),
+               BPTMASK(vs->val),vs->name);
     }
   }
   else {
@@ -495,7 +513,7 @@ int main(int argc,char *argv[])
       fprintf(stderr,"Cannot open \"%s\" for reading!\n",argv[1]);
   }
   else
-    fprintf(stderr,"vobjdump V0.7\nWritten by Frank Wille\n"
+    fprintf(stderr,"vobjdump V0.8\nWritten by Frank Wille\n"
             "Usage: %s <file name>\n",argv[0]);
 
   return rc;

@@ -43,25 +43,25 @@ or additional options.
         the file @code{<listfile>}.
 
 @item -nocase
-        Disables case-sensitivity for everything - identifiers, directives
-        and instructions. Note that directives and instructions may already
-        be case-insensitive by default in some modules.
+        Disables case-sensitivity for symbols. This doesn't necessarily
+        include macro and structure names, which depend on the syntax-module
+        in use. Mnemonics and directives are usually case-insensitive by
+        default.
 
 @item -nosym
-        Strips all local symbols from the output file and doesn't include
+        Strips all local symbols from the output file and doesn't keep
         any other symbols than those which are required for external
         linkage.
 
 @item -o <ofile>
-        Write the generated assembler output to @code{<ofile>} rather than
-        @file{a.out}.
+        Write the assembler output to @code{<ofile>} rather than @file{a.out}.
 
 @item -quiet      
         Do not print the copyright notice and the final statistics.
 
 @item -x
-        Show an error message, when referencing an undefined symbol.
-        The default behaviour is to declare this symbol as externally
+        Show an error message when referencing an undefined symbol.
+        The default behaviour is to declare such symbols as externally
         defined.
 @end table
 
@@ -69,24 +69,20 @@ Other options:
 
 @table @option
 
-@item -chklabels
-        Issues a warning when a label matches a mnemonic or directive name
-        in either upper or lower case.
-
 @item -depend=<type>
         Print all dependencies while assembling the source with the given
         options. No output is generated. @code{<type>} may be the word @option{list}
         for printing one file name in each new line, or @option{make} for
         printing a sequence of file names on a single line, suitable for
         Makefiles.
-        When the output file name is given by @option{-o outname} then
+        If the output file name is given by @option{-o outname} then
         @command{vasm} will also print @code{outname:} in front of it.
         Note that in contrast to option @option{-dependall} only relative
         include file dependencies will be listed (which is the common case).
 
 @item -dependall=<type>
         Prints dependencies in the same way as @option{-depend}, but
-        also prints all include files with absolute paths.
+        adds the include files using absolute paths to it.
 
 @item -depfile <filename>
         Used together with @option{-depend} or @option{-dependall} and
@@ -106,7 +102,7 @@ Other options:
         include the appropriate code which can determine the current
         work directory. Otherwise the default would be to set the current
         work directory to an empty string. Currently supported are:
-        @code{AMIGA}, @code{ATARI}, @code{MSDOS},  @code{UNIX},
+        @code{AMIGA}, @code{ATARI}, @code{MSDOS}, @code{UNIX},
         @code{_WIN32}. MacOSX works with @code{UNIX}.
 
 @item -esc
@@ -173,12 +169,12 @@ Other options:
 @item -noesc
         No escape character sequences. This will make vasm treat the
         escape character \ as any other character. Might be useful for
-        compatibility.
+        compatibility. This is the default in most modules.
 
 @item -noialign
-        Perform no automatic alignment for instructions. Note that
+        Perform no automatic alignment for instructions. Note, that
         unaligned instructions can make your code crash when executed!
-        Only set when you know what you are doing!
+        Only set if you know what you are doing!
 
 @item -nomsg=<n>
         Disable the informational message @code{<n>}. @code{<n>} has to be the number
@@ -203,15 +199,11 @@ Other options:
         binary output module. Defaults to a zero-byte.
 
 @item -pic
-        Try to generate position independent code. Every relocation
-        position is flagged by an error message. This option overrides
+        Try to generate position independent code. Every address needing
+        relocation is flagged by an error message. This option overrides
         the absolute default mode (@code{ORG 0}) of binary output
         modules and doesn't work if you force the assembler into
         absolute mode by such a directive.
-
- Note, that this means
-        you cannot do any PIC-checks in absolute mode, because no
-        relocations are generated there.
 
 @item -relpath
         Do not interpret a source path starting with '/' or '\', or including
@@ -225,16 +217,16 @@ Other options:
 
 @item -unnamed-sections
         Sections are no longer distinguished by their name, but only by
-        their attributes. This has the effect that when defining a second
-        section with a different name but same attributes as a first one,
+        their attributes. Which has the effect that when defining a second
+        section with a different name, but same attributes as a first one,
         it will switch to the first, instead of starting a new section.
         Is enabled automatically, when using an output-module which doesn't
         support section names. For example: aout, tos, xfile.
 
 @item -unsshift
         The shift-right operator (@code{>>}) treats the value to shift as
-        unsigned, which has the effect that only 0 bits are inserted on the
-        left side. The number of bits in a value depend on the target
+        unsigned, which has the effect that only 0-bits are inserted on the
+        left (MSB) side. The number of bits in a value depend on the target
         address type (refer to the appropriate cpu module documentation).
         This may already be the default for some syntax modules, like for
         example mot-syntax in Devpac-compatibility mode.
@@ -385,8 +377,10 @@ may have any length and can be of global or local scope. Internally, there
 are three types of symbols:
 @table @code
 @item Expression
-      These symbols are usually not visible outside the
+      These symbols are usually not visible outside of the
       source, unless they are explicitly exported.
+      Note, that some object file formats use exported expressions
+      referencing an imported symbol to represent indirect symbols.
 @item Label
       Labels are always addresses within a program section. By
       default they have local scope for the linker.
@@ -540,6 +534,7 @@ Has to be provided completely by the syntax module.
     @item Matthias Bock
     @item Simone Bevilacqua
     @item Karoly Balogh
+    @item Patrik Axelsson
     @item Anomie-p
 @end itemize
 

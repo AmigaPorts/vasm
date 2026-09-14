@@ -589,6 +589,10 @@ following members that can be accessed by the modules:.
         become something else than @code{IMPORT}. Otherwise an error
         is displayed.
 
+@item #define SYMINDIR (1<<18)
+        For @code{EXPRESSION} symbols only: the expression's base-symbol
+        represents the referenced indirect symbol name.
+
 @item #define RSRVD_S (1L<<24)
         The range from bit 24 to 27 (counted from the LSB) is reserved for
         use by the syntax module.
@@ -1844,6 +1848,10 @@ For example you may optionally set the following global variables:
   Set when the output module supports target-bytes with @code{BITSPERBYTE}.
   Otherwise it is expected that all output modules do work at least
   with 8-bit target-bytes.
+@item output_indirect = 1;
+  Set when the output module supports indirect symbols. They can be
+  recognized as a symbol of type @code{EXPRESSION} with the flag @code{SYMINDIR}.
+  The expression's base-symbol provides the referenced indirect symbol.
 @end table
 
 Writing a section's contents is typically done by traversing over all
