@@ -1130,7 +1130,7 @@ int init_cpu(void)
   cpudirhash = new_hashtable(0x100);
   for (i=0; i<sizeof(cpudirs)/sizeof(cpudirs[0]); i++) {
     data.idx = i;
-    add_hashentry(cpudirhash,cpudirs[i].name,data);
+    add_hashentry(cpudirhash,cpudirs[i].name,data,1);  /* case insensitive */
   }
   if (debug && cpudirhash->collisions)
     fprintf(stderr,"*** %d cpu directive collisions!!\n",cpudirhash->collisions);

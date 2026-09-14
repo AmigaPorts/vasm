@@ -731,7 +731,7 @@ char *parse_cpu_special(char *s)
 	new=data.ptr;
       else{
 	data.ptr=new=mymalloc(sizeof(*new));
-	add_hashentry(sfrhash,cnvstr(name,s-name),data);
+	add_hashentry(sfrhash,cnvstr(name,s-name),data,0);
 	new->next=first_sfr;
 	first_sfr=new;
       }

@@ -1,5 +1,5 @@
 /* symbol.c - manage all kinds of symbols */
-/* (c) in 2014-2024 by Volker Barthelmann and Frank Wille */
+/* (c) in 2014-2025 by Volker Barthelmann and Frank Wille */
 
 #include "vasm.h"
 
@@ -63,6 +63,8 @@ void print_symbol(FILE *f,symbol *p)
     fprintf(f,"XREF ");
   if (p->flags & XDEF)
     fprintf(f,"XDEF ");
+  if (p->flags & SYMINDIR)
+    fprintf(f,"INDIR ");
   if (p->flags & PROTECTED)
     fprintf(f,"PROT ");
   if (p->flags & REFERENCED)
@@ -106,7 +108,31 @@ void add_symbol(symbol *p)
   p->next = first_symbol;
   first_symbol = p;
   data.ptr = p;
-  add_hashentry(symhash,p->name,data);
+  add_hashentry(symhash,p->name,data,nocase);
+}
+
+
+void rem_symbol(symbol *symp)
+/* Symbol name must be unique!
+   Symbol list will be modified! Be careful while iterating over it! */
+{
+  /* remove from list */
+  if (first_symbol != symp) {
+    symbol *symlist;
+    for (symlist=first_symbol; symlist; symlist=symlist->next) {
+      if (symlist->next == symp) {
+        symlist->next = symp->next;
+        break;
+      }
+    }
+  }
+  else
+    first_symbol = symp->next;
+
+  /* remove from hash table and deallocate */
+  rem_hashentry(symhash,symp->name,nocase);
+  myfree((void *)symp->name);
+  myfree(symp);
 }
 
 
@@ -123,8 +149,8 @@ void refer_symbol(symbol *sym,const char *refname)
 /* refer to an existing symbol with an additional name */
 {
   hashdata data;
-  data.ptr=sym;
-  add_hashentry(symhash,refname,data);
+  data.ptr = sym;
+  add_hashentry(symhash,refname,data,nocase);
 }
 
 
@@ -308,7 +334,8 @@ symbol *new_labsym(section *sec,const char *name)
 
     if (find_name_nc(mnemohash,name,&data))
       general_error(39);  /* name conflicts with mnemonic */
-    else if (find_name_nc(dirhash,name,&data))
+    else if ((dotdirs&&*name=='.'&&find_name_nc(dirhash,name+1,&data)) ||
+             (!dotdirs&&find_name_nc(dirhash,name,&data)))
       general_error(40);  /* name conflicts with directive */
   }
 
@@ -421,12 +448,12 @@ expr *set_internal_abs(const char *name,taddr newval)
 
 
 #ifdef HAVE_REGSYMS
-void add_regsym(regsym *rsym)
+void add_regsym(regsym *rsym,int no_case)
 {
   hashdata data;
 
   data.ptr = rsym;
-  add_hashentry(regsymhash,rsym->reg_name,data);
+  add_hashentry(regsymhash,rsym->reg_name,data,no_case);
 }
 
 
@@ -469,7 +496,7 @@ regsym *new_regsym(int redef,int no_case,const char *name,int type,
     rsym->reg_type = type;
     rsym->reg_flags = flags;
     rsym->reg_num = num;
-    add_regsym(rsym);
+    add_regsym(rsym,no_case);
   }
   else {
     /* just update */

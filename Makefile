@@ -14,7 +14,7 @@ endif
 TARGETEXTENSION = $(EXEEXT)
 
 CCOUT = -o $(DUMMY)
-CFLAGS = -c -std=c90 -O2 -pedantic -Wno-long-long -Wno-shift-count-overflow -DUNIX $(OUTFMTS)
+CFLAGS = -c -std=c90 -O2 -pedantic -Wno-long-long -Wno-parentheses -Wno-shift-count-overflow -DUNIX $(OUTFMTS)
 
 LD = $(CC)
 LDOUT = $(CCOUT)

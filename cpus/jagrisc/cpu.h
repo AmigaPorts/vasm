@@ -23,7 +23,8 @@ typedef uint32_t utaddr;
 #define INST_ALIGN 2
 
 /* default alignment for n-bit data */
-#define DATA_ALIGN(n) ((n<=8)?1:2)
+int jag_data_align(int);
+#define DATA_ALIGN(n) jag_data_align(n)
 
 /* operand class for n-bit data definitions */
 int jag_data_operand(int);

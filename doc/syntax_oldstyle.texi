@@ -133,7 +133,7 @@ In this case they are treated like space directives, which just increment the
 program counter by the appropriate number of bytes.
 
 Note, that the size of multi-byte data directives, like @code{dw}, @code{word},
-@code{dl}, etc., depends on the CPU backend. Exmaple: @code{dl} has 24 bits
+@code{dl}, etc., depends on the CPU backend. Example: @code{dl} has 24 bits
 for the 65816.
 
 The following directives are supported by this syntax module (if the
@@ -192,12 +192,12 @@ CPU- and output-module allow it):
 
 @item blkl <exp>[,<fill>]
       Insert <exp> zeroed or <fill> long words into the current section-
-      The endianess and the number of bits per word depend on the target CPU.
+      The endianness and the number of bits per word depend on the target CPU.
       For example, will be 24 bits for 6502 and 65816.
 
 @item blkw <exp>[,<fill>]
       Insert <exp> zeroed or <fill> words into the current section.
-      The endianess and the number of bits per word depend on the target CPU,
+      The endianness and the number of bits per word depend on the target CPU,
       but the size will usually be the size of two bytes.
 
 @item bss <exp>
@@ -589,19 +589,19 @@ CPU- and output-module allow it):
 
 @item ds16 <exp>[,<fill>]
       Insert <exp> zeroed or <fill> 16-bit words into the current section,
-      using the target's endianess.
+      using the target's endianness.
 
 @item ds24 <exp>[,<fill>]
       Insert <exp> zeroed or <fill> 24-bit words into the current section,
-      using the target's endianess.
+      using the target's endianness.
 
 @item ds32 <exp>[,<fill>]
       Insert <exp> zeroed or <fill> 32-bit words into the current section,
-      using the target's endianess.
+      using the target's endianness.
 
 @item ds64 <exp>[,<fill>]
       Insert <exp> zeroed or <fill> 64-bit words into the current section,
-      using the target's endianess.
+      using the target's endianness.
 
 @item section <name>[,"<attributes>"]
       Starts a new section named <name> or reactivate an old one. If

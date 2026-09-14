@@ -12,7 +12,7 @@
    be provided by the main module.
 */
 
-const char *syntax_copyright="vasm motorola syntax module 3.19c (c) 2002-2025 Frank Wille";
+const char *syntax_copyright="vasm motorola syntax module 3.19d (c) 2002-2025 Frank Wille";
 hashtable *dirhash;
 char commentchar = ';';
 int dotdirs;
@@ -1871,6 +1871,7 @@ struct {
   "ds.s",P|D,handle_spc32,
   "ds.d",P|D,handle_spc64,
   "ds.x",P|D,handle_spc96,
+  "ds.p",P|D,handle_spc96,
   "dx",P,handle_xspc16,
   "dx.b",P,handle_xspc8,
   "dx.w",P,handle_xspc16,
@@ -1879,6 +1880,7 @@ struct {
   "dx.s",P,handle_xspc32,
   "dx.d",P,handle_xspc64,
   "dx.x",P,handle_xspc96,
+  "dx.p",P,handle_xspc96,
   "dcb",P|D,handle_blk16,
   "dcb.b",P|D,handle_blk8,
   "dcb.w",P|D,handle_blk16,
@@ -1887,6 +1889,7 @@ struct {
   "dcb.s",P|D,handle_blk32,
   "dcb.d",P|D,handle_blk64,
   "dcb.x",P|D,handle_blk96,
+  "dcb.p",P|D,handle_blk96,
   "blk",P,handle_blk16,
   "blk.b",P,handle_blk8,
   "blk.w",P,handle_blk16,
@@ -1895,6 +1898,7 @@ struct {
   "blk.s",P,handle_blk32,
   "blk.d",P,handle_blk64,
   "blk.x",P,handle_blk96,
+  "blk.p",P,handle_blk96,
 #ifdef VASM_CPU_M68K
   "dr",0,handle_reldata16,
   "dr.b",0,handle_reldata8,
@@ -1972,6 +1976,7 @@ struct {
   "rs.s",P,handle_rs32,
   "rs.d",P,handle_rs64,
   "rs.x",P,handle_rs96,
+  "rs.p",P,handle_rs96,
   "so",P,handle_rs16,
   "so.b",P,handle_rs8,
   "so.w",P,handle_rs16,
@@ -1980,6 +1985,7 @@ struct {
   "so.s",P,handle_rs32,
   "so.d",P,handle_rs64,
   "so.x",P,handle_rs96,
+  "so.p",P,handle_rs96,
   "fo",P,handle_fo16,
   "fo.b",P,handle_fo8,
   "fo.w",P,handle_fo16,
@@ -1988,6 +1994,7 @@ struct {
   "fo.s",P,handle_fo32,
   "fo.d",P,handle_fo64,
   "fo.x",P,handle_fo96,
+  "fo.p",P,handle_fo96,
   "cargs",P|D,handle_cargs,
   "echo",P,handle_echo,
   "printt",0,handle_printt,
@@ -2249,9 +2256,7 @@ void parse(void)
         s++;
       }
 
-      s = skip(s);
-
-      s = handle_iif(s);
+      s = handle_iif(skip(s));
 
       if (!strnicmp(s,"equ",3) && isspace((unsigned char)*(s+3))) {
         s = skip(s+3);
@@ -2767,7 +2772,7 @@ int init_syntax(void)
   for (i=0; i<dir_cnt; i++) {
     if ((directives[i].flags & avail) == avail) {
       data.idx = i;
-      add_hashentry(dirhash,directives[i].name,data);
+      add_hashentry(dirhash,directives[i].name,data,1);  /* case insensitive */
     }
   }
   if (debug && dirhash->collisions)

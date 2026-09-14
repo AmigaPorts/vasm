@@ -149,6 +149,7 @@ extern struct stabdef *first_nlist,*last_nlist;
 extern char emptystr[];
 extern char vasmsym_name[];
 
+extern int output_indirect;
 extern int octetsperbyte,output_bitsperbyte,output_bytes_le,input_bytes_le;
 extern unsigned long long taddrmask;
 extern taddr taddrmin,taddrmax;
@@ -283,3 +284,4 @@ int init_output_o65(char **,void (**)(FILE *,section *,symbol *),int (**)(char *
 int init_output_woz(char **,void (**)(FILE *,section *,symbol *),int (**)(char *));
 int init_output_pap(char **,void (**)(FILE *,section *,symbol *),int (**)(char *));
 int init_output_hans(char **,void (**)(FILE *,section *,symbol *),int (**)(char *));
+int init_output_coff(char **,void (**)(FILE *,section *,symbol *),int (**)(char *));

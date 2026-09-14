@@ -411,7 +411,7 @@ int init_syntax(void)
   dirhash=new_hashtable(0x200); /*FIXME: */
   for(i=0;i<dir_cnt;i++){
     data.idx=i;
-    add_hashentry(dirhash,directives[i].name,data);
+    add_hashentry(dirhash,directives[i].name,data,0);
   }
   
   return 1;

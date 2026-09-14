@@ -1,10 +1,10 @@
 /* aout.c a.out output driver for vasm */
-/* (c) in 2008-2016,2020-2024 by Frank Wille */
+/* (c) in 2008-2016,2020-2025 by Frank Wille */
 
 #include "vasm.h"
 #include "output_aout.h"
 #if defined(OUTAOUT) && defined(MID)
-static char *copyright="vasm a.out output module 0.9 (c) 2008-2016,2020-2024 Frank Wille";
+static char *copyright="vasm a.out output module 0.11 (c) 2008-2016,2020-2025 Frank Wille";
 
 static section *sections[3];
 static utaddr secsize[3];
@@ -19,8 +19,7 @@ static struct list dreloclist;
 
 static int mid = -1;
 static int isPIC = 1;
-
-#define SECT_ALIGN 4  /* .text and .data are aligned to 32 bits */
+static taddr secalign;
 
 
 static int aout_getinfo(symbol *sym)
@@ -135,6 +134,19 @@ static void aout_initwrite(section *firstsec)
   if (mid == -1)
     mid = MID;
 
+  if (!secalign) {
+    /* set section alignment default per CPU */
+#if defined(VASM_CPU_M68K)
+    secalign = mid==MID_SUN010 ? 2 : 4;
+#elif defined(VASM_CPU_PPC) || defined(VASM_CPU_ARM)
+    secalign = 4;
+#elif defined(VASM_CPU_X86)
+    secalign = 1;
+#else
+    secalign = 2;
+#endif
+  }
+
   initlist(&aoutstrlist.l);
   aoutstrlist.hashtab = mycalloc(ASTRTABSIZE*sizeof(struct StrTabNode *));
   aoutstrlist.nextoffset = 4;  /* first string is always at offset 4 */
@@ -176,9 +188,9 @@ static void aout_initwrite(section *firstsec)
   }
 
   secoffs[S_TEXT] = 0;
-  secoffs[S_DATA] = secsize[S_TEXT] + balign(secsize[S_TEXT],SECT_ALIGN);
+  secoffs[S_DATA] = secsize[S_TEXT] + balign(secsize[S_TEXT],secalign);
   secoffs[S_BSS] = secoffs[S_DATA] + secsize[S_DATA] +
-                  balign(secsize[S_DATA],SECT_ALIGN);
+                  balign(secsize[S_DATA],secalign);
 }
 
 
@@ -280,7 +292,7 @@ static void aout_symconvert(symbol *sym,int symbind,int syminfo,int be)
   else {
     if (sym->flags & COMMON) {
       /* common symbol */
-      #if 0 /* GNU binutils prefers N_UNDF with val!=0 instead of N_COMM! */
+      #if 0 /* GNU binutils prefer N_UNDF with val!=0 instead of N_COMM! */
       type = N_COMM | ext;
       #else
       type = N_UNDF | N_EXT;
@@ -306,19 +318,25 @@ static void aout_symconvert(symbol *sym,int symbind,int syminfo,int be)
       else  /* absolute ORG section: convert labels to ABS symbols */
         type = N_ABS | ext;
     }
-    else if (sym->type==EXPRESSION) {
-      if (sym->flags & EXPORT) {
+    else if (sym->type == EXPRESSION) {
+      if (sym->flags & SYMINDIR) {
+        symbol *indir;
+
+        if (find_base(sym->expr,&indir,NULL,0) != BASE_OK)
+          ierror(0);
+        aout_addsymhash(sym->name,0,symbind,0,N_INDR|ext,0,be);
+        aout_addsymhash(indir->name,0,0,0,N_UNDF|N_EXT,0,be);
+        if (val != 0)
+          output_error(26,sym->name,indir->name);  /* addend not allowed */
+        return;
+      }
+      else if (sym->flags & EXPORT) {
         /* absolute symbol */
         type = N_ABS | ext;
       }
       else
         return;  /* ignore local expressions */
     }
-    /* @@@ else if (indirect symbols?) {
-      aout_addsymhash(sym->name,0,symbind,0,N_INDR|ext,0,be);
-      aout_addsymhash(sym->indir_name,0,0,0,N_UNDF|N_EXT,0,be);
-      return;
-    }*/
     else
       ierror(0);
   }
@@ -420,7 +438,7 @@ static uint32_t aout_convert_rlist(int be,atom *a,int secid,
                           be);
         if (baserel)  /* val is based on .data for small-data/bss */
           val += rsecid==S_BSS ? secoffs[S_BSS]-secoffs[S_DATA] : 0;
-        else
+        else if (std_reloc(rl) != REL_PC)
           val += secoffs[rsecid];
         rsize += sizeof(struct relocation_info);
       }
@@ -441,6 +459,7 @@ static uint32_t aout_convert_rlist(int be,atom *a,int secid,
       /* patch addend for a.out */
       if (std_reloc(rl) == REL_PC)
         val -= pc + r->byteoffset;
+
       if (a->type == DATA)
         setval(be,a->content.db->data+r->byteoffset,r->size>>3,val+add);
       else if (a->type==SPACE && a->content.sb->space!=0) {
@@ -587,14 +606,14 @@ static void write_output(FILE *f,section *sec,symbol *sym)
   drsize = aout_addrelocs(be,S_DATA,&dreloclist,aoutstd_getrinfo);
 
   aout_header(f,OMAGIC,isPIC?EX_PIC:0,
-              secsize[S_TEXT] + balign(secsize[S_TEXT],SECT_ALIGN),
-              secsize[S_DATA] + balign(secsize[S_DATA],SECT_ALIGN),
+              secsize[S_TEXT] + balign(secsize[S_TEXT],secalign),
+              secsize[S_DATA] + balign(secsize[S_DATA],secalign),
               secsize[S_BSS],
               aoutsymlist.nextindex * sizeof(struct nlist32),
               0,trsize,drsize,be);
   aout_writesection(f,sections[S_TEXT],0);
-  aout_writeorg(f,sec,SECT_ALIGN);
-  aout_writesection(f,sections[S_DATA],SECT_ALIGN);
+  aout_writeorg(f,sec,secalign);
+  aout_writesection(f,sections[S_DATA],secalign);
   aout_writerelocs(f,&treloclist);
   aout_writerelocs(f,&dreloclist);
   aout_writesymbols(f);
@@ -608,6 +627,10 @@ static int output_args(char *p)
     mid = atoi(p+5);
     return 1;
   }
+  else if (!strncmp(p,"-aoutalign=",11)) {
+    secalign = atoi(p+11);
+    return 1;
+  }
   return 0;
 }
 
@@ -619,6 +642,7 @@ int init_output_aout(char **cp,void (**wo)(FILE *,section *,symbol *),
   *wo = write_output;
   *oa = output_args;
   unnamed_sections = 1;  /* output format doesn't support named sections */
+  output_indirect = 1;   /* we do support indirect symbols */
   secname_attr = 1;
   return 1;
 }

@@ -8,7 +8,7 @@
 @setfilename index.texi
 @settitle vasm manual
 @setchapternewpage odd
-@set UPDATED April 2025
+@set UPDATED November 2025
 
 @ifinfo
 
@@ -131,6 +131,10 @@ Detailed instructions how to build vasm can be found in the last chapter.
 @node a.out output module
 @chapter a.out output module
 @include output_aout.texi
+
+@node COFF output module
+@chapter COFF output module
+@include output_coff.texi
 
 @node TOS output module
 @chapter TOS output module

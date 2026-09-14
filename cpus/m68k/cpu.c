@@ -123,7 +123,8 @@ static int OC_ASRI,OC_LSRI,OC_ASLI,OC_LSLI,OC_NEG;
 static int OC_FMOVEMTOLIST,OC_FMOVEMTOSPEC,OC_FMOVEMFROMSPEC;
 static int OC_FDIV,OC_FSDIV,OC_FDDIV,OC_FSGLDIV;
 static int OC_FMUL,OC_FSMUL,OC_FDMUL,OC_FSGLMUL;
-static int OC_LOAD,OC_SWAP,OC_ADDQVX,OC_SUBQVX;
+static int OC_LOAD,OC_SWAP,OC_ADDQVX,OC_SUBQVX,OC_EXTUB,OC_EXTUW;
+static int OC_CMPIW,OC_CMPIWVX,OC_ADDIW,OC_ADDIWVX;
 
 static struct {
   int *var;
@@ -133,6 +134,8 @@ static struct {
   /* Note: keep same order as in mnemonics table! */
   &OC_ADD,              "add",    DA,0,
   &OC_ADDA,             "adda",   0,0,
+  &OC_ADDIW,            "addiw",  QI,NI,
+  &OC_ADDIWVX,          "addiw",  QI,VX,
   &OC_ADDQ,             "addq",   0,AD,
   &OC_ADDQVX,           "addq",   0,VX,
   &OC_ASLI,             "asl",    QI,0,
@@ -140,7 +143,11 @@ static struct {
   &OC_BRA,              "bra",    0,0,
   &OC_BSR,              "bsr",    0,0,
   &OC_CLR,              "clr",    0,0,
+  &OC_CMPIW,            "cmpiw",  QI,NI,
+  &OC_CMPIWVX,          "cmpiw",  QI,VX,
   &OC_EXT,              "ext",    0,0,
+  &OC_EXTUB,            "extub",  D_,0,
+  &OC_EXTUW,            "extuw",  D_,0,
   &OC_FDIV,             "fdiv",   FA,F_,
   &OC_FSDIV,            "fsdiv",  FA,F_,
   &OC_FDDIV,            "fddiv",  FA,F_,
@@ -3485,6 +3492,18 @@ dontswap:
       }
       ip->op[0] = ip->op[1];
     }
+    else if ((cpu_type & apollo) && ip->op[1]->mode==MODE_Dn && ext=='l' &&
+             (val==0xff || val==0xffff)) {
+      /* Apollo: andi.l #$ff/$ffff,Dn -> extub/w.l Dn */
+      ip->code = val==0xff ? OC_EXTUB : OC_EXTUW;
+      if (final) {
+        free_operand(ip->op[0]);
+        if (warn_opts>1)
+          cpu_error(51,"andi.l #$ff/$ffff,Dn -> extub/w.l Dn");
+      }
+      ip->op[0] = ip->op[1];
+      ip->op[1] = NULL;
+    }
     else if ((val==0xff && ext=='b') || (val==0xffff && ext=='w') ||
              (val==0xffffffff && ext=='l')) {
       /* andi.b/w/l #$ff/$ffff/$ffffffff,<ea> -> tst.b/w/l <ea> */
@@ -3577,6 +3596,24 @@ dontswap:
           if (final && warn_opts>1)
             cpu_error(51,"adda/suba #x,An -> lea (d,An),An");
         }
+      }
+      else if ((cpu_type&apollo) && opt_gen && ext=='l' &&
+               ip->op[1]->mode!=MODE_An &&
+               ((!(oc & 0x4200) && val>=-0x7fff && val<=0x8000) ||
+                ((oc & 0x4200) && val>=-0x8000 && val<=0x7fff))) {
+        /* ADD/ADDI/SUB/SUBI.L #x,<ea> --> ADDIW.L #x,<ea> (x is 16 bits) */
+        ip->code =  (ip->op[1]->mode==MODE_SpecReg) ? OC_ADDIWVX : OC_ADDIW;
+        if (!(oc & 0x4200))
+          val = -val;  /* negate for SUB/SUBI -> ADDIW */
+        ip->op[0]->extval[0] = val;
+        if (!(oc & 0x4200) && final) {
+          free_expr(ip->op[0]->value[0]);
+          ip->op[0]->value[0] = number_expr(val);
+        }
+        else
+          ip->op[0]->flags |= FL_DoNotEval;
+        if (final && warn_opts>1)
+          cpu_error(51,"add/sub.l #x -> addiw.l #x / addiw.l #-x");
       }
     }
   }
@@ -3696,6 +3733,14 @@ dontswap:
         if (final && warn_opts>1)
           cpu_error(51,"cmp #0 -> tst");
       }
+    }
+    else if ((cpu_type & apollo) && opt_gen && abs &&
+             ip->op[0]->mode==MODE_Extended && ip->op[0]->reg==REG_Immediate &&
+             ext=='l' && val>=-0x8000 && val<=0x7fff && oc!=0xb0c0) {
+      /* CMP/CMPI.L #<16bit-signed>,<ea> --> CMPIW.L */
+      ip->code = (ip->op[1]->mode==MODE_SpecReg) ? OC_CMPIWVX : OC_CMPIW;
+      if (final && warn_opts>1)
+        cpu_error(51,"cmp.l #x,ea -> cmpiw.l #x,ea");
     }
   }
 
@@ -5621,7 +5666,7 @@ int init_cpu(void)
   movchash = new_hashtable(0x800);
   for (i=0; i<specreg_cnt; i++) {
     data.idx = i;
-    add_hashentry(i<FIRST_CTRLREG?spechash:movchash,SpecRegs[i].name,data);
+    add_hashentry(i<FIRST_CTRLREG?spechash:movchash,SpecRegs[i].name,data,1);
   }
   if (debug && spechash->collisions)
     fprintf(stderr,"*** %d special register collisions!!\n",spechash->collisions);
@@ -5904,6 +5949,8 @@ static char *devpac_option(char *s)
   }
   else if (!strnicmp(s,"case",4)) {
     nocase = !flag;
+    if (!phxass_compat)
+      nocase_macros = !flag;
     return s+4;
   }
   else if (!strnicmp(s,"chkpc",5)) {
@@ -5993,6 +6040,8 @@ static char *devpac_option(char *s)
           break;
         case 'c':
           nocase = !flag;
+          if (!phxass_compat)
+            nocase_macros = !flag;
           break;
         case 'd':
           no_symbols = !flag;

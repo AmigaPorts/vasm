@@ -10,7 +10,7 @@ mnemonic mnemonics[] = {
 };
 const int mnemonic_cnt = sizeof(mnemonics) / sizeof(mnemonics[0]);
 
-const char *cpu_copyright = "vasm Jaguar RISC cpu backend 0.7 (c) 2014-2017,2020,2021,2024,2025 Frank Wille";
+const char *cpu_copyright = "vasm Jaguar RISC cpu backend 0.7a (c) 2014-2017,2020,2021,2024,2025 Frank Wille";
 const char *cpuname = "jagrisc";
 int bytespertaddr = 4;
 
@@ -73,7 +73,7 @@ int init_cpu(void)
 
   /* define all condition code register symbols */
   for (r=cc_regsyms; r->reg_name!=NULL; r++)
-    add_regsym(r);
+    add_regsym(r,1);
 
   return 1;
 }
@@ -120,7 +120,7 @@ static int parse_reg(char **p)
   char *s;
 
   if (s = skip_identifier(rp)) {
-    regsym *sym = find_regsym(rp,s-rp);
+    regsym *sym = find_regsym_nc(rp,s-rp);
 
     if (sym!=NULL && sym->reg_type==RTYPE_R) {
       reg = sym->reg_num;
@@ -243,7 +243,7 @@ char *parse_cpu_special(char *start)
       /* undefine a register symbol */
       s = skip(s);
       if (buf = parse_identifier(0,&s)) {
-        undef_regsym(buf->str,0,RTYPE_R);
+        undef_regsym(buf->str,1,RTYPE_R);
         eol(s);
         return skip_line(s);
       }
@@ -253,7 +253,7 @@ char *parse_cpu_special(char *start)
       /* undefine a condition code symbol */
       s = skip(s);
       if (buf = parse_identifier(0,&s)) {
-        undef_regsym(strtolower(buf->str),0,RTYPE_CC);
+        undef_regsym(buf->str,1,RTYPE_CC);
         eol(s);
         return skip_line(s);
       }
@@ -282,7 +282,7 @@ int parse_cpu_label(char *labname,char **start)
       int r;
 
       if ((r = parse_reg(&s)) >= 0)
-        new_regsym(0,0,labname,RTYPE_R,0,r);
+        new_regsym(0,1,labname,RTYPE_R,0,r);
       else
         cpu_error(2);  /* register expected */
       eol(s);
@@ -297,7 +297,7 @@ int parse_cpu_label(char *labname,char **start)
 
       if ((ccexp = parse_cc(&s)) != NULL) {
         if (eval_expr(ccexp,&val,NULL,0))
-          new_regsym(0,0,labname,RTYPE_CC,0,(int)val);
+          new_regsym(0,1,labname,RTYPE_CC,0,(int)val);
         else
           general_error(30);  /* expression must be a constant */
       }
@@ -328,6 +328,15 @@ int jag_data_operand(int bits)
   if (bits & OPSZ_SWAP)
     return DATAI_OP;
   return bits==64 ? DATA64_OP : DATA_OP;
+}
+
+
+int jag_data_align(int bits)
+{
+  if (bits>=64) return 8;
+  if (bits>=32) return 4;
+  if (bits>=16) return 2;
+  return 1;
 }
 
 
@@ -624,8 +633,8 @@ dblock *eval_instruction(instruction *ip, section *sec, taddr pc)
     jagrelswap32(&db->relocs,2,values[2].base,values[2].btype,values[2].val);
     /* followed by an indirect jump using the optjr register */
     inst = (mnemonics[OC_JUMP].ext.opcode & 63) << 10;
-    inst |= ((values[0].val & 31) << 5) | (values[1].val & 31);
-    jagrel5(&db->relocs,&values[1],jag_big_endian?11:0);
+    inst |= ((values[1].val & 31) << 5) | (values[0].val & 31);
+    jagrel5(&db->relocs,&values[0],jag_big_endian?11:0);
     setval(jag_big_endian,&db->data[6],2,inst);
   }
   else if (db->size != 2)

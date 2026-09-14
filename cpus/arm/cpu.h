@@ -210,6 +210,7 @@ typedef struct {
 
 
 /* exported by cpu.c */
+extern uint32_t cpu_type;
 extern int arm_be_mode;
 
 int cpu_available(int);

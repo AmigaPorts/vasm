@@ -12,7 +12,7 @@
 #include <limits.h>
 
 /* maximum VOBJ version to support */
-#define VOBJ_MAX_VERSION 2
+#define VOBJ_MAX_VERSION 3
 
 /* symbol types */
 #define LABSYM 1
@@ -27,10 +27,11 @@
 #define TYPE_SECTION  3
 #define TYPE_FILE     4
 
-#define EXPORT 8
-#define INEVAL 16
-#define COMMON 32
-#define WEAK 64
+#define EXPORT (1<<3)
+#define INEVAL (1<<4)
+#define COMMON (1<<5)
+#define WEAK (1<<6)
+#define SYMINDIR (1<<18)  /* symbol indirection since V3+ */
 
 
 typedef int64_t taddr;
@@ -48,6 +49,8 @@ struct vobj_section {
   const char *name;
   taddr dsize,fsize;
 };
+
+#define ABSOLUTE (1<<4)  /* section-flags: has absolute start address (V3+) */
 
 #define STD_REL_TYPE(t) ((t)&0x1f)
 #define REL_MOD_S 0x20

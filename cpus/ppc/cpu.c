@@ -1,6 +1,6 @@
 /*
 ** cpu.c PowerPC cpu-description file
-** (c) in 2002-2019,2024 by Frank Wille
+** (c) in 2002-2019,2024,2025 by Frank Wille
 */
 
 #include "vasm.h"
@@ -12,7 +12,7 @@ mnemonic mnemonics[] = {
 
 const int mnemonic_cnt=sizeof(mnemonics)/sizeof(mnemonics[0]);
 
-const char *cpu_copyright="vasm PowerPC cpu backend 3.2 (c) 2002-2019,2024 Frank Wille";
+const char *cpu_copyright="vasm PowerPC cpu backend 3.2a (c) 2002-2019,2024,2025 Frank Wille";
 const char *cpuname = "PowerPC";
 int bytespertaddr = 4;
 int ppc_endianess = 1;
@@ -912,5 +912,6 @@ int cpu_args(char *p)
   else
     return 0;
 
+  bytespertaddr = (cpu_type&CPU_TYPE_64) ? 8 : 4;
   return 1;
 }

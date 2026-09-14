@@ -146,7 +146,12 @@ static int namecmp(const void *s1,const void *s2)
 
 static int valcmp(const void *s1,const void *s2)
 {
-  return (int)(get_sym_value(*(symbol **)s1) - get_sym_value(*(symbol **)s2));
+  utaddr a1 = (*(symbol **)s1)->pc;
+  utaddr a2 = (*(symbol **)s2)->pc;
+
+  if (a1 == a2)
+    return 0;
+  return a1 > a2 ? 1 : -1;
 }
 
 #if VASM_CPU_OIL
@@ -541,7 +546,10 @@ static void write_listing_wide(char *listname,section *first_section)
     for (i=0; i<nsyms; i++) {
       sym = symlist[i];
       fprintf(f,"%-31s ",sym->name);
+
+      /* remember symbol value in sym->pc for all cases */
       if (sym->flags & COMMON) {
+        sym->pc = sym->align;
         fprintf(f,"COM %lld bytes, alignment %lld",
                 (long long)get_sym_size(sym),(long long)sym->align);
       }
@@ -566,8 +574,9 @@ static void write_listing_wide(char *listname,section *first_section)
               type = 'A';
             else
               type = 'S';
-            fprintf(f," %c:%0*llX",
-                    type,addrw,MADDR(get_sym_value(sym)));
+            sym->pc = get_sym_value(sym);
+            fprintf(f," %c:%0*llX",type,addrw,MADDR(sym->pc));
+            break;
         }
       }
       if (sym->flags & EXPORT)
@@ -593,7 +602,7 @@ static void write_listing_wide(char *listname,section *first_section)
             (sym->type!=EXPRESSION || !(sym->flags & ABSLABEL)))
           continue;
       }
-      fprintf(f,"%0*llX %s\n",addrw,MADDR(get_sym_value(sym)),sym->name);
+      fprintf(f,"%0*llX %s\n",addrw,MADDR(sym->pc),sym->name);
     }
 
     myfree(symlist);

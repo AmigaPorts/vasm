@@ -3,12 +3,16 @@ selected with the @option{-Faout} option.
 
 @section Legal
 
-    This module is written in 2008-2016,2020,2021 by Frank Wille and
+    This module is written in 2008-2016,2020-2025 by Frank Wille and
     is covered by the vasm copyright without modifications.
 
 @section Additional options for this module
  
 @table @option
+    @item -aoutalign=<nbytes>
+        Align the beginning of the @code{.data} and @code{.bss} section in the
+        output to a multiple of @code{nbytes}. Without this option the default
+        for the current CPU is used.
     @item -mid=<machine id>
         Sets the MID field of the a.out header to the specified value.
         The MID defaults to 2 (Sun020 big-endian) for M68k and to 100

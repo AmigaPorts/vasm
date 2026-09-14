@@ -1,6 +1,30 @@
 vasm history
 =============
 
+- 2.0d (23.11.25)
+o Improved performance of expression evaluation.
+o New output module "coff" for writing COFF object files. Currently supported
+  are m68k, x86, PPC and ARM. Contributed by Jean-Paul Mari.
+o Added indirect symbols by exporting equates pointing to an imported
+  destination symbol. Currently supported by the output modules VOBJ and a.out.
+o -chklabels option is the default now. You can still disable the warnings.
+o List symbols sorted by their unsigned value.
+o Fixed internal error with non-case-sensitive macro redefinitions.
+o m68k: Apollo: Optimize ANDI.L #$ff/ffff,Dn to EXTUB/W.L Dn.
+  Optimize CMP.L #x,<ea> to CMPIW.L #x,<ea> (with -32768 <= x <= 32767)
+  and ADD/SUB.L #x,<ea> to ADDIW #x,<ea> (negated x for SUB).
+o m68k: Apollo: added LPSTOP.
+o PPC: Set address size to 8 for 64-bit CPUs. Fixes some output formats.
+o ARM: Allow any type of immediate constant, like characters.
+o jagrisc: Fixed -opt-jr. Operands for the JUMP were swapped.
+o jagrisc: Use natural default alignment for 32 and 64-bit data.
+o mot-syntax: Include ds.p, blk.p, rs.p, etc. for completeness (same as .x).
+o aout-output: Fixed PC-relative relocs on a different local section.
+o aout-output: New option -aoutalign to change the default section alignment.
+o aout-output: Indirect symbols.
+o vobj-output: No longer write local symbols with -nosym option.
+o vobj-output: Indirect symbols.
+
 - 2.0c (14.07.25)
 o Fixed output of the last byte in a CPU's address space for multiple
   output formats allowing absolute addressing: gst, ihex, pap, srec, woz.

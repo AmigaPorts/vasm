@@ -355,7 +355,7 @@ static int add_import(const char *name)
     else
       importlist = last = impnode;
     data.ptr = impnode;
-    add_hashentry(importhash,name,data);
+    add_hashentry(importhash,name,data,0);
   }
   return ((struct o65Import *)data.ptr)->idx;
 }

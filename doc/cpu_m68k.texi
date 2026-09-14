@@ -248,6 +248,7 @@ This module provides the following additional options:
         Show a warning, if the target address for absolute (16/32-bit) or
         16-bit PC-relative addressing modes is odd and the operation size
         is not 8-bit. No warnings for accessing external symbols.
+        The warning may not make sense for all instructions (e.g. @code{LEA}).
 @end table
 
 In its default setting (no @option{-devpac} or @option{-phxass} option)
@@ -736,7 +737,7 @@ module:
       list <reglist> to it. Registers in a list must be separated
       by a slash (@code{/}) and ranges or registers can be defined
       by using a hyphen (@code{-}). No character at all represents
-      an empty regiser list. Optionally you may specify the <reglist>
+      an empty register list. Optionally you may specify the <reglist>
       as an 8-bit register mask constant (@code{fp0} is bit 0, @code{fp7}
       is bit 7). Examples for valid FPU register lists are: @code{fp0-fp7},
       @code{fp1-3/fp5/fp7}, @code{fpiar/fpcr}.
@@ -746,7 +747,7 @@ module:
       list <reglist> to it. Registers in a list must be separated
       by a slash (@code{/}) and ranges or registers can be defined
       by using a hyphen (@code{-}). No character at all represents
-      an empty regiser list. Optionally you may specify the <reglist>
+      an empty register list. Optionally you may specify the <reglist>
       as a 16-bit register mask constant (@code{d0} is bit 0, @code{a7}
       is bit 15). Examples for valid register lists are: @code{d0-d7/a0-a6},
       @code{d3-6/a0/a1/a4-5}.

@@ -52,7 +52,7 @@ This is not supported.
 The operands are separated from the mnemonic by whitespace.
 Multiple operands are separated by comma (@code{,}).
 
-The chracter used to introduce comments is usually the semicolon (@code{;}).
+The character used to introduce comments is usually the semicolon (@code{;}).
 Except for the following backends, which change it to a hash (@code{#})
 character: ppc, vidcore, x86.
 

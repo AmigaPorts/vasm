@@ -4,8 +4,10 @@
 #include "vasm.h"
 
 #ifdef OUTVOBJ
-static char *copyright="vasm vobj output module 2.0a (c) 2002-2025 Volker Barthelmann";
+static char *copyright="vasm vobj output module 2.1 (c) 2002-2025 Volker Barthelmann";
 static unsigned char version;
+#define VOBJ2 (1<<2)
+#define VOBJ3 (2<<2)
 
 /*
   Format:
@@ -35,6 +37,7 @@ nsections
   .string name
   .string attr
   .number flags
+  .number address [vobj version 3+ and flags&ABSOLUTE only]
   .number align
   .number size (in target-bytes)
   .number nrelocs
@@ -109,6 +112,9 @@ static int sym_valid(symbol *symp)
     return 0;  /* ignore internal/temporary symbols */
   if(symp->flags & VASMINTERN)
     return 0;  /* ignore vasm-internal symbols */
+  if(no_symbols&&
+     symp->type!=IMPORT&&!(symp->flags&EXPORT)&&TYPE(symp)<TYPE_SECTION)
+    return 0;  /* ignore local symbols */
   return 1;
 }
 
@@ -298,15 +304,29 @@ static void write_output(FILE *f,section *sec,symbol *sym)
     write_string(f,symp->name);
     write_number(f,symp->type);
     write_number(f,symp->flags);
-    write_number(f,symp->sec?symp->sec->idx:0);
-    write_number(f,get_sym_value(symp));
-    write_number(f,get_sym_size(symp));
+    if(symp->type==EXPRESSION&&symp->flags&SYMINDIR){
+      symbol *indir;
+      if(version<VOBJ3)
+        output_error(25,"-vobj3","indirect symbols");  /* requires -vobj3 */
+      if(find_base(symp->expr,&indir,NULL,0)!=BASE_OK)
+        ierror(0);
+      write_number(f,0);
+      write_number(f,get_sym_value(symp));  /* @@@ possible indirect-addend */
+      write_number(f,indir->idx);  /* store index of indirect symbol as size */
+    }
+    else{
+      write_number(f,symp->sec?symp->sec->idx:0);
+      write_number(f,get_sym_value(symp));
+      write_number(f,get_sym_size(symp));
+    }
   }
 
   for(secp=sec;secp;secp=secp->next){
     write_string(f,secp->name);
     write_string(f,secp->attr);
     write_number(f,secp->flags);
+    if(version>=VOBJ3&&(secp->flags&ABSOLUTE))
+      write_number(f,0);  /* @@@ FIXME! NOW! @@@ */
     write_number(f,secp->align);
     get_section_sizes(secp,&size,&data,&nrelocs);
     write_number(f,size);
@@ -319,9 +339,12 @@ static void write_output(FILE *f,section *sec,symbol *sym)
 
 static int output_args(char *p)
 {
-  if(!strcmp(p,"-vobj2")){
-    version=(1<<2);
-    return 1;
+  if(!strncmp(p,"-vobj",5)&&isdigit((unsigned char)p[5])){
+    int v = atoi(p+5);
+    if(v>=1 && v<=3){
+      version=((v-1)<<2);
+      return 1;
+    }
   }
   return 0;
 }
@@ -332,7 +355,8 @@ int init_output_vobj(char **cp,void (**wo)(FILE *,section *,symbol *),int (**oa)
   *wo=write_output;
   *oa=output_args;
   secname_attr = 1;  /* attribute is used to differentiate between sections */
-  output_bitsperbyte = 1;  /* we do support BITSPERBYTE != 8 */
+  output_bitsperbyte = 1; /* we do support BITSPERBYTE != 8 */
+  output_indirect = 1;    /* we do support indirect symbols */
   return 1;
 }
 

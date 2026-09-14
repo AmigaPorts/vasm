@@ -608,7 +608,8 @@ macro *new_macro(char *name,struct namelen *maclist,struct namelen *endmlist,
         }
       }
     }
-    else if (find_name_nc(dirhash,name,&data)) {
+    else if ((dotdirs&&*name=='.'&&find_name_nc(dirhash,name+1,&data)) ||
+             (!dotdirs&&find_name_nc(dirhash,name,&data))) {
       m->text = NULL;
       general_error(52);  /* name conflicts with directive */
     }
@@ -962,7 +963,7 @@ static void add_macro(void)
       cur_macro->next = first_macro;
       first_macro = cur_macro;
       data.ptr = cur_macro;
-      add_hashentry(macrohash,cur_macro->name,data);
+      add_hashentry(macrohash,cur_macro->name,data,nocase_macros);
     }
     cur_macro = NULL;
   }
@@ -1019,7 +1020,7 @@ int new_structure(char *name)
   struct_prevsect = current_section;
   switch_offset_section(name,-1);
   data.ptr = cur_struct = current_section;
-  add_hashentry(structhash,cur_struct->name,data);
+  add_hashentry(structhash,cur_struct->name,data,nocase_macros);
   return 1;
 }
 
@@ -1039,16 +1040,19 @@ int end_structure(section **prev)
 section *find_structure(char *name,int name_len)
 {
   hashdata data;
-  section *s;
 
   if (cur_struct!=NULL && !strcmp(cur_struct->name,name))
     general_error(55);  /* illegal structure recursion */
 
-  if (find_namelen(structhash,name,name_len,&data))
-    s = data.ptr;
-  else
-    s = NULL;
-  return s;
+  if (nocase_macros) {
+    if (!find_namelen_nc(structhash,name,name_len,&data))
+      return NULL;
+  }
+  else {
+    if (!find_namelen(structhash,name,name_len,&data))
+      return NULL;
+  }
+  return data.ptr;
 }
 
 
